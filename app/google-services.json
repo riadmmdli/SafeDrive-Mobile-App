@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "833177881330",
+    "firebase_url": "https://kaza-uyari-sistemi-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "kaza-uyari-sistemi",
+    "storage_bucket": "kaza-uyari-sistemi.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:833177881330:android:07120d9be25831d594de6b",
+        "android_client_info": {
+          "package_name": "com.example.kazauyarisistemi"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyA2wsI7He2WaR-FzKi045sa5ZXsYbIwL6I"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

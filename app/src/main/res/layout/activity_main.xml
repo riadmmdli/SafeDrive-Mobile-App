@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="24dp"
+    android:gravity="center"
+    android:background="@drawable/gradient_background">
+
+    <!-- Logo ve Başlık -->
+    <ImageView
+        android:layout_width="120dp"
+        android:layout_height="120dp"
+        android:src="@drawable/ic_warning"
+        android:layout_marginBottom="24dp"
+        android:contentDescription="Uyarı İkonu" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🚨 KAZA UYARI SİSTEMİ"
+        android:textSize="24sp"
+        android:textStyle="bold"
+        android:textColor="@color/primary_text"
+        android:layout_marginBottom="8dp"
+        android:gravity="center" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Kayseri Trafik Kazaları"
+        android:textSize="16sp"
+        android:textColor="@color/secondary_text"
+        android:layout_marginBottom="48dp"
+        android:gravity="center" />
+
+    <!-- Açıklama -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:background="@drawable/info_card_background"
+        android:padding="16dp"
+        android:layout_marginBottom="32dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="📍 Harita Üzerinde:"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:textColor="@color/primary_text"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🔴 Kırmızı İşaretler: Ölümlü Kazalar"
+            android:textSize="14sp"
+            android:textColor="@color/secondary_text"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="🟡 Sarı İşaretler: Yaralı Kazalar"
+            android:textSize="14sp"
+            android:textColor="@color/secondary_text"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="💡 İşaretlere tıklayarak detayları görebilirsiniz"
+            android:textSize="12sp"
+            android:textStyle="italic"
+            android:textColor="@color/accent_text" />
+
+    </LinearLayout>
+
+    <!-- Haritayı Aç Butonu -->
+    <Button
+        android:id="@+id/btnOpenMap"
+        android:layout_width="match_parent"
+        android:layout_height="56dp"
+        android:text="🗺️ HARİTAYI AÇ"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:textColor="@android:color/white"
+        android:background="@drawable/primary_button_background"
+        android:layout_marginBottom="16dp"
+        android:elevation="4dp" />
+
+    <!-- Hakkında Butonu -->
+    <Button
+        android:id="@+id/btnAbout"
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:text="ℹ️ HAKKINDA"
+        android:textSize="16sp"
+        android:textColor="@color/primary_color"
+        android:background="@drawable/secondary_button_background"
+        android:layout_marginBottom="16dp" />
+
+    <!-- Alt Bilgi -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Kayseri Büyükşehir Belediyesi Verileri"
+        android:textSize="12sp"
+        android:textColor="@color/secondary_text"
+        android:layout_marginTop="24dp"
+        android:gravity="center"
+        android:alpha="0.7" />
+
+</LinearLayout>

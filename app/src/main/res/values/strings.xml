@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Uygulama Adı -->
+    <string name="app_name">Kaza Uyarı Sistemi</string>
+    <string name="title_activity_maps">Kaza Haritası</string>
+
+    <!-- Ana Ekran -->
+    <string name="main_title">🚨 KAZA UYARI SİSTEMİ</string>
+    <string name="main_subtitle">Kayseri Trafik Kazaları</string>
+    <string name="btn_open_map">🗺️ HARİTAYI AÇ</string>
+    <string name="btn_about">ℹ️ HAKKINDA</string>
+
+    <!-- Açıklamalar -->
+    <string name="info_map_legend">📍 Harita Üzerinde:</string>
+    <string name="info_red_markers">🔴 Kırmızı İşaretler: Ölümlü Kazalar</string>
+    <string name="info_yellow_markers">🟡 Sarı İşaretler: Yaralı Kazalar</string>
+    <string name="info_click_details">💡 İşaretlere tıklayarak detayları görebilirsiniz</string>
+    <string name="info_data_source">Kayseri Büyükşehir Belediyesi Verileri</string>
+
+    <!-- Harita Ekranı -->
+    <string name="loading_data">Kaza verileri yükleniyor...</string>
+    <string name="fatal_accidents">Ölümlü</string>
+    <string name="injury_accidents">Yaralı</string>
+    <string name="total_accidents">Toplam</string>
+
+    <!-- Marker Bilgileri -->
+    <string name="fatal_accident_marker">🔴 ÖLÜMLÜ KAZA</string>
+    <string name="injury_accident_marker">🟡 YARALI KAZA</string>
+    <string name="accident_details_title">🚨 Kaza Detayları</string>
+
+    <!-- Detay Bilgileri -->
+    <string name="detail_district">🏢 İlçe: %s</string>
+    <string name="detail_neighborhood">🏘️ Mahalle: %s</string>
+    <string name="detail_road">🛣️ Yol: %s</string>
+    <string name="detail_time">⏰ Saat: %s:%s</string>
+    <string name="detail_coordinates">📍 Koordinat: %s, %s</string>
+    <string name="detail_type_fatal">⚠️ Tür: Ölümlü</string>
+    <string name="detail_type_injury">⚠️ Tür: Yaralı</string>
+
+    <!-- Butonlar -->
+    <string name="btn_ok">Tamam</string>
+    <string name="btn_show_on_map">Haritada Göster</string>
+    <string name="btn_back">Geri</string>
+
+    <!-- Hata Mesajları -->
+    <string name="error_loading_fatal">Ölümlü kaza yükleme hatası: %s</string>
+    <string name="error_loading_injury">Yaralı kaza yükleme hatası: %s</string>
+    <string name="error_permission_denied">Konum izni verilmedi. Harita özelliği çalışmayabilir.</string>
+
+    <!-- Başarı Mesajları -->
+    <string name="success_fatal_loaded">%d ölümlü kaza işaretlendi</string>
+    <string name="success_injury_loaded">%d yaralı kaza işaretlendi</string>
+
+    <!-- Hakkında Dialog -->
+    <string name="about_title">🚨 Kaza Uyarı Sistemi</string>
+    <string name="about_message">Bu uygulama Kayseri\'deki trafik kazalarını harita üzerinde gösterir.\n\n🔴 Kırmızı işaretler: Ölümlü kazalar\n🟡 Sarı işaretler: Yaralı kazalar\n\nHerhangi bir işaret üzerine tıklayarak detayları görebilirsiniz.</string>
+
+    <!-- Varsayılan Değerler -->
+    <string name="unknown">Bilinmiyor</string>
+    <string name="no_road_info">Yol bilgisi yok</string>
+
+    <!-- İçerik Açıklamaları -->
+    <string name="warning_icon_desc">Uyarı İkonu</string>
+    <string name="back_button_desc">Geri Dön</string>
+    <string name="map_fragment_desc">Google Maps Fragment</string>
+</resources>

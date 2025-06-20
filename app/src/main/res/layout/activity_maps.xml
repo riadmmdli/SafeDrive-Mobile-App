@@ -7,13 +7,14 @@
     tools:context=".MapsActivity">
 
     <!-- Harita Fragment'i -->
+
+    <!-- Üst İstatistik Paneli -->
     <fragment
         android:id="@+id/map"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Üst İstatistik Paneli -->
     <LinearLayout
         android:id="@+id/statsPanel"
         android:layout_width="match_parent"
@@ -152,6 +153,19 @@
 
     </com.google.android.material.card.MaterialCardView>
 
+    <LinearLayout
+        android:id="@+id/warningLayoutContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:visibility="gone"
+        android:background="#88FFFFFF"
+        android:elevation="10dp"
+        android:padding="16dp"
+        android:clickable="true"
+        android:focusable="true"/>
+
     <!-- Yükleme Paneli -->
     <LinearLayout
         android:id="@+id/loadingPanel"
@@ -201,7 +215,7 @@
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="88dp"
+        android:layout_marginBottom="200dp"
         android:src="@android:drawable/ic_menu_mylocation"
         app:tint="@android:color/white"
         app:backgroundTint="#4CAF50" />
@@ -214,7 +228,7 @@
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true"
         android:layout_marginEnd="16dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginBottom="140dp"
         android:src="@android:drawable/ic_dialog_alert"
         app:tint="@android:color/white"
         app:backgroundTint="#FF9800" />

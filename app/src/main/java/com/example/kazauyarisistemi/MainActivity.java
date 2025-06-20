@@ -62,8 +62,7 @@ public class MainActivity extends AppCompatActivity {
             } else {
                 Toast.makeText(this, "Konum izni verilmedi. Harita özelliği çalışmayabilir.",
                         Toast.LENGTH_LONG).show();
-                // İzin olmadan da haritayı aç
-                openMapsActivity();
+
             }
         }
     }

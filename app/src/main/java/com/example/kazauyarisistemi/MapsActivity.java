@@ -7,6 +7,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.util.Log;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -32,6 +33,9 @@ import com.google.firebase.database.DatabaseError;
 import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
+import android.view.LayoutInflater;
+import android.view.ViewGroup;
+import android.widget.LinearLayout;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,7 +61,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private Runnable simulateMovement;
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
-    private static final float PROXIMITY_THRESHOLD_METERS = 500; // 500 metre
+    private static final float PROXIMITY_THRESHOLD_METERS = 200;
     private static final long SIMULATED_MOVEMENT_INTERVAL_MS = 2000; // 2 seconds
 
     // ... variables ...
@@ -68,6 +72,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private Location lastKnownLocation; // Yeni değişken
     private List<KazaData> kazaDataList = new ArrayList<>();
 
+    private LinearLayout warningLayout;
+    private boolean isLocationUpdateInProgress = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -85,6 +91,15 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         }
 
         fabBack.setOnClickListener(v -> finish());
+
+        // Test butonu ekleyin (geçici)
+        findViewById(R.id.fabMyLocation).setOnClickListener(v -> {
+            testProximitySystem();
+            if (currentLocation != null) {
+                mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15));
+            }
+        });
+
         requestLocationPermission();
     }
 
@@ -113,6 +128,8 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         tvTotalCount = findViewById(R.id.tvTotalCount);
         loadingPanel = findViewById(R.id.loadingPanel);
         fabBack = findViewById(R.id.fabBack);
+        warningLayout = findViewById(R.id.warningLayoutContainer);
+
     }
 
     @Override
@@ -138,6 +155,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.setOnMyLocationChangeListener(this);
 
         loadKazaData();
+        enableMyLocationIfPermitted();
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            mMap.setMyLocationEnabled(true);
+            startLocationUpdates();
+        }
+    }
+    private void enableMyLocationIfPermitted() {
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             mMap.setMyLocationEnabled(true);
             startLocationUpdates();
@@ -148,12 +172,21 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             return;
         }
+        if (isLocationUpdateInProgress) return; // Prevent multiple simultaneous updates
+        isLocationUpdateInProgress = true;
         fusedLocationClient.getLastLocation().addOnSuccessListener(this, location -> {
             if (location != null) {
                 lastKnownLocation = location;
                 updateLocationOnMap(location);
                 locationUpdatesEnabled = true;
+                startSimulatedMovement(); // Start simulation after successful location retrieval
+            } else {
+                Log.e(TAG, "getLastLocation returned null.");
             }
+            isLocationUpdateInProgress = false; // Update complete
+        }).addOnFailureListener(e -> {
+            Log.e(TAG, "getLastLocation failed: " + e.getMessage());
+            isLocationUpdateInProgress = false;
         });
     }
 
@@ -353,52 +386,99 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     }
 
     private void getLastKnownLocation() {
-        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+        if (!locationPermissionsGranted()) {
+            Log.w(TAG, "Konum izni verilmemiş. getLastKnownLocation çağrılmadı.");
             return;
         }
-        fusedLocationClient.getLastLocation()
-                .addOnSuccessListener(this, location -> {
-                    if (location != null) {
-                        updateLocationOnMap(location);
-                        startSimulatedMovement();
-                    }
-                });
+
+        try {
+            fusedLocationClient.getLastLocation()
+                    .addOnSuccessListener(this, location -> {
+                        if (location != null) {
+                            updateLocationOnMap(location);
+                            startSimulatedMovement();
+                        } else {
+                            Log.e(TAG, "getLastKnownLocation returned null");
+                        }
+                    })
+                    .addOnFailureListener(this, e -> Log.e(TAG, "getLastKnownLocation failed", e));
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException: Konum izni yok. getLastLocation başarısız.", e);
+        }
+    }
+    private boolean locationPermissionsGranted() {
+        return ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
     private void updateLocationOnMap(Location location) {
         if (location == null) return;
+
         currentLocation = new LatLng(location.getLatitude(), location.getLongitude());
+        Log.d(TAG, "Location updated: " + currentLocation.latitude + ", " + currentLocation.longitude);
+
         if (userMarker != null) {
             userMarker.remove();
         }
-        userMarker = mMap.addMarker(new MarkerOptions().position(currentLocation).title("Benim Konumum").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+
+        userMarker = mMap.addMarker(new MarkerOptions()
+                .position(currentLocation)
+                .title("Benim Konumum")
+                .icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+
         lastKnownLocation = location;
+
+        // Uyarı kontrolünü her konum güncellemesinde yap
+        checkProximityToAccidents();
     }
 
     // onMapClick metodunu düzgün şekilde implement edin
     @Override
     public void onMapClick(LatLng latLng) {
-        Log.d(TAG, "Harita tıklandı: " + latLng.latitude + ", " + latLng.longitude);
+        Log.d(TAG, "Map clicked: " + latLng.latitude + ", " + latLng.longitude);
 
-        manualLocationChange = true; // Manuel konum değişikliği olduğunu belirtin
+        manualLocationChange = true;
         Location newLocation = new Location("manual");
         newLocation.setLatitude(latLng.latitude);
         newLocation.setLongitude(latLng.longitude);
-        updateLocationOnMap(newLocation);
-        checkProximityToAccidents();
-        manualLocationChange = false; // Manuel değişikliğin bittiğini belirtin
 
-        // Kullanıcıya geri bildirim verin
-        Toast.makeText(this, "Konum güncellendi: " + String.format("%.6f, %.6f", latLng.latitude, latLng.longitude), Toast.LENGTH_SHORT).show();
+        // Eski uyarıyı kapat
+        hideWarning();
+
+        // Yeni konumu güncelle
+        updateLocationOnMap(newLocation);
+        manualLocationChange = false;
+
+        Toast.makeText(this, "Konum güncellendi: " +
+                        String.format("%.6f, %.6f", latLng.latitude, latLng.longitude),
+                Toast.LENGTH_SHORT).show();
+    }
+
+    private void testProximitySystem() {
+        Log.d(TAG, "=== PROXIMITY SYSTEM TEST ===");
+        Log.d(TAG, "Current location: " + (currentLocation != null ?
+                currentLocation.latitude + "," + currentLocation.longitude : "NULL"));
+        Log.d(TAG, "Kaza data count: " + kazaDataList.size());
+        Log.d(TAG, "Proximity threshold: " + PROXIMITY_THRESHOLD_METERS + "m");
+
+        if (currentLocation != null && !kazaDataList.isEmpty()) {
+            Log.d(TAG, "Testing proximity for first 5 accidents:");
+            for (int i = 0; i < Math.min(5, kazaDataList.size()); i++) {
+                KazaData kaza = kazaDataList.get(i);
+                float[] results = new float[1];
+                Location.distanceBetween(currentLocation.latitude, currentLocation.longitude,
+                        kaza.y, kaza.x, results);
+                Log.d(TAG, "Accident " + i + " at " + kaza.ilce + ": " + results[0] + "m");
+            }
+        }
     }
 
     private void startSimulatedMovement() {
         simulateMovement = () -> {
-            if (!locationUpdatesEnabled || lastKnownLocation == null || manualLocationChange) return;
+            if (!locationUpdatesEnabled || lastKnownLocation == null || manualLocationChange || isLocationUpdateInProgress) return;
 
             Random random = new Random();
-            double latOffset = (random.nextDouble() - 0.5) / 500; //Daha küçük hareketler
-            double lngOffset = (random.nextDouble() - 0.5) / 500;
+            double latOffset = (random.nextDouble() - 0.5) / 1000; // Smaller movement
+            double lngOffset = (random.nextDouble() - 0.5) / 1000;
 
             double newLat = lastKnownLocation.getLatitude() + latOffset;
             double newLng = lastKnownLocation.getLongitude() + lngOffset;
@@ -406,8 +486,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             Location simulatedLocation = new Location("simulated");
             simulatedLocation.setLatitude(newLat);
             simulatedLocation.setLongitude(newLng);
+
+            isLocationUpdateInProgress = true; // Indicate update is in progress
             updateLocationOnMap(simulatedLocation);
-            checkProximityToAccidents();
+            isLocationUpdateInProgress = false; // Update complete
+
             handler.postDelayed(simulateMovement, SIMULATED_MOVEMENT_INTERVAL_MS);
         };
 
@@ -418,39 +501,103 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public void onMyLocationChange(Location location) {
         // Gerçek konum değiştiğinde bu fonksiyon çağrılır
         updateLocationOnMap(location);
-        checkProximityToAccidents();
+
     }
 
 
     private void checkProximityToAccidents() {
-        if (currentLocation == null || kazaDataList.isEmpty()) return;
+        if (currentLocation == null || kazaDataList.isEmpty()) {
+            Log.d(TAG, "checkProximityToAccidents: currentLocation or kazaDataList is null or empty.");
+            return;
+        }
+
+        Log.d(TAG, "Current location: " + currentLocation.latitude + ", " + currentLocation.longitude);
+        Log.d(TAG, "Checking proximity with " + kazaDataList.size() + " kaza data");
 
         for (KazaData kaza : kazaDataList) {
             float[] results = new float[1];
-            Location.distanceBetween(currentLocation.latitude, currentLocation.longitude, kaza.y, kaza.x, results);
+            // Koordinat düzeni düzeltildi: kaza.y = latitude, kaza.x = longitude
+            Location.distanceBetween(currentLocation.latitude, currentLocation.longitude,
+                    kaza.y, kaza.x, results);
+
             float distance = results[0];
+            Log.d(TAG, "Distance to " + kaza.ilce + " (" + kaza.y + "," + kaza.x + "): " + distance + "m");
 
             if (distance <= PROXIMITY_THRESHOLD_METERS) {
-                String warningMessage = "Yakınlarda " + (kaza.kazaTuru.equals("olumlu") ? "ölümlü" : "yaralı") + " kaza tespit edildi! (" + Math.round(distance) + "m)";
-                Toast.makeText(this, warningMessage, Toast.LENGTH_LONG).show();
-                Log.d(TAG, "Yakınlık uyarısı: " + warningMessage);
+                Log.d(TAG, "PROXIMITY ALERT! Distance: " + distance + "m to " + kaza.ilce);
+                showWarning(kaza, distance);
+                return; // İlk uyarıyı göster ve çık
             }
+        }
+    }
+    private void showWarning(KazaData kaza, float distance) {
+        if (warningLayout == null) {
+            Log.e(TAG, "warningLayout null!");
+            return;
+        }
+
+        try {
+            // UI thread'de çalıştığından emin ol
+            runOnUiThread(() -> {
+                warningLayout.removeAllViews();
+                LayoutInflater inflater = LayoutInflater.from(this);
+                View warningView = inflater.inflate(R.layout.warning_layout, warningLayout, false);
+
+                TextView warningTextView = warningView.findViewById(R.id.warningTextView);
+                ImageView closeWarning = warningView.findViewById(R.id.closeWarning);
+
+                // Arka plan rengi
+                int warningColor = kaza.kazaTuru.equals("olumlu") ?
+                        ContextCompat.getColor(this, android.R.color.holo_red_light) :
+                        ContextCompat.getColor(this, android.R.color.holo_orange_light);
+
+                warningView.setBackgroundColor(warningColor);
+
+                // Uyarı metni
+                String warningText = "⚠️ UYARI: Yakınlarda " +
+                        (kaza.kazaTuru.equals("olumlu") ? "ÖLÜMLÜ" : "YARALI") +
+                        " kaza!\nMesafe: " + Math.round(distance) + "m\n" +
+                        "Konum: " + kaza.ilce + " - " + kaza.mahalle;
+
+                warningTextView.setText(warningText);
+
+                closeWarning.setOnClickListener(v -> hideWarning());
+
+                warningLayout.addView(warningView);
+                warningLayout.setVisibility(View.VISIBLE);
+
+                // Titreşim ekle (opsiyonel)
+                // Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+                // if (vibrator != null) vibrator.vibrate(500);
+
+                Log.d(TAG, "WARNING DISPLAYED: " + warningText);
+
+                // Toast da göster
+                Toast.makeText(this, warningText, Toast.LENGTH_LONG).show();
+            });
+
+        } catch (Exception e) {
+            Log.e(TAG, "showWarning error: " + e.getMessage(), e);
+        }
+    }
+
+    private void hideWarning() {
+        if (warningLayout != null) {
+            warningLayout.setVisibility(View.GONE);
         }
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        if (handler != null && simulateMovement != null) {
-            handler.removeCallbacks(simulateMovement);
-        }
+        hideWarning(); // Uygulama duraklatıldığında uyarıyı kaldır
+        handler.removeCallbacks(simulateMovement);
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        if (handler != null && simulateMovement != null) {
-            handler.removeCallbacks(simulateMovement);
-        }
+        hideWarning(); // Uygulama kapatıldığında uyarıyı kaldır
+        handler.removeCallbacks(simulateMovement);
     }
 }

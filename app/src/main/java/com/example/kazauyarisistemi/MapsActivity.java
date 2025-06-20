@@ -1,13 +1,23 @@
 package com.example.kazauyarisistemi;
 
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.location.Location;
 import android.os.Bundle;
+import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
 import androidx.annotation.NonNull;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
+
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.maps.CameraUpdateFactory;
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
@@ -23,43 +33,78 @@ import com.google.firebase.database.DatabaseReference;
 import com.google.firebase.database.FirebaseDatabase;
 import com.google.firebase.database.ValueEventListener;
 
-public class MapsActivity extends FragmentActivity implements OnMapReadyCallback {
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Random;
+
+// GoogleMap.OnMapClickListener interface'ini eklendi
+public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, GoogleMap.OnMyLocationChangeListener, GoogleMap.OnMapClickListener {
 
     private static final String TAG = "MapsActivity";
     private GoogleMap mMap;
     private DatabaseReference mDatabase;
-
-    // Kayseri merkez koordinatları
     private static final LatLng KAYSERI_CENTER = new LatLng(38.7312, 35.4787);
-
-    // UI elementleri
     private TextView tvOlumluCount, tvYaraliCount, tvTotalCount;
     private LinearLayout loadingPanel;
     private FloatingActionButton fabBack;
-
     private int olumluMarkerCount = 0;
     private int yaraliMarkerCount = 0;
+
+    private FusedLocationProviderClient fusedLocationClient;
+    private Marker userMarker;
+    private LatLng currentLocation;
+    private Handler handler = new Handler();
+    private Runnable simulateMovement;
+
+    private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
+    private static final float PROXIMITY_THRESHOLD_METERS = 500; // 500 metre
+    private static final long SIMULATED_MOVEMENT_INTERVAL_MS = 2000; // 2 seconds
+
+    // ... variables ...
+    private boolean proximityWarningsEnabled = true;
+    private FloatingActionButton fabMyLocation, fabProximityToggle;
+    private boolean locationUpdatesEnabled = false; // Yeni değişken
+    private boolean manualLocationChange = false;
+    private Location lastKnownLocation; // Yeni değişken
+    private List<KazaData> kazaDataList = new ArrayList<>();
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
 
-        // UI elementlerini bağla
         initializeViews();
-
-        // Firebase referansını al
         mDatabase = FirebaseDatabase.getInstance().getReference();
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
-        // Harita fragment'ini başlat
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
 
-        // Geri dön butonu
         fabBack.setOnClickListener(v -> finish());
+        requestLocationPermission();
+    }
+
+    private void requestLocationPermission() {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, LOCATION_PERMISSION_REQUEST_CODE);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                // Permission granted, proceed with location updates
+                getLastKnownLocation();
+            } else {
+                Toast.makeText(this, "Konum izni gereklidir.", Toast.LENGTH_SHORT).show();
+            }
+        }
     }
 
     private void initializeViews() {
@@ -72,25 +117,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     @Override
     public void onMapReady(@NonNull GoogleMap googleMap) {
-        Log.d(TAG, "onMapReady çağrıldı");
         mMap = googleMap;
-
-        if (mMap == null) {
-            Log.e(TAG, "GoogleMap null!");
-            return;
-        }
-        mMap = googleMap;
-
-        // Harita ayarları
         mMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
         mMap.getUiSettings().setZoomControlsEnabled(true);
         mMap.getUiSettings().setCompassEnabled(true);
         mMap.getUiSettings().setMyLocationButtonEnabled(true);
-
-        // Kayseri'ye odaklan
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(KAYSERI_CENTER, 12));
 
-        // Marker tıklama olayı
         mMap.setOnMarkerClickListener(marker -> {
             String title = marker.getTitle();
             if (title != null && title.contains("KAZA")) {
@@ -100,17 +133,38 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             return false;
         });
 
-        // Kaza verilerini yükle
+        // OnMapClickListener'ı burada set edin
+        mMap.setOnMapClickListener(this);
+        mMap.setOnMyLocationChangeListener(this);
+
         loadKazaData();
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+            mMap.setMyLocationEnabled(true);
+            startLocationUpdates();
+        }
     }
+
+    private void startLocationUpdates() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        fusedLocationClient.getLastLocation().addOnSuccessListener(this, location -> {
+            if (location != null) {
+                lastKnownLocation = location;
+                updateLocationOnMap(location);
+                locationUpdatesEnabled = true;
+            }
+        });
+    }
+
 
     private void loadKazaData() {
         showLoading(true);
         Toast.makeText(this, "Kaza verileri yükleniyor...", Toast.LENGTH_SHORT).show();
 
-        // Önce ölümlü kazaları yükle
         loadOlumluKazalar();
     }
+
 
     private void showLoading(boolean show) {
         loadingPanel.setVisibility(show ? View.VISIBLE : View.GONE);
@@ -128,17 +182,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 Log.d(TAG, "Ölümlü kaza verileri alındı");
-
                 for (DataSnapshot batchSnapshot : dataSnapshot.getChildren()) {
                     for (DataSnapshot kazaSnapshot : batchSnapshot.getChildren()) {
                         addKazaMarker(kazaSnapshot, "olumlu");
                     }
                 }
-
                 Log.d(TAG, "Toplam ölümlü marker: " + olumluMarkerCount);
                 updateStatistics();
-
-                // Yaralı kazaları yükle
                 loadYaraliKazalar();
             }
 
@@ -159,17 +209,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             @Override
             public void onDataChange(@NonNull DataSnapshot dataSnapshot) {
                 Log.d(TAG, "Yaralı kaza verileri alındı");
-
                 for (DataSnapshot batchSnapshot : dataSnapshot.getChildren()) {
                     for (DataSnapshot kazaSnapshot : batchSnapshot.getChildren()) {
                         addKazaMarker(kazaSnapshot, "yarali");
                     }
                 }
-
                 Log.d(TAG, "Toplam yaralı marker: " + yaraliMarkerCount);
                 updateStatistics();
                 showLoading(false);
-
                 Toast.makeText(MapsActivity.this,
                         String.format("Toplam %d kaza yüklendi (%d ölümlü, %d yaralı)",
                                 olumluMarkerCount + yaraliMarkerCount, olumluMarkerCount, yaraliMarkerCount),
@@ -189,7 +236,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private void addKazaMarker(DataSnapshot kazaSnapshot, String kazaTuru) {
         try {
-            // Koordinatları al
             Object xObj = kazaSnapshot.child("X").getValue();
             Object yObj = kazaSnapshot.child("Y").getValue();
 
@@ -199,42 +245,23 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
 
             double x, y;
+            x = xObj instanceof String ? Double.parseDouble((String) xObj) : ((Number) xObj).doubleValue();
+            y = yObj instanceof String ? Double.parseDouble((String) yObj) : ((Number) yObj).doubleValue();
 
-            // Koordinat verilerini double'a çevir
-            if (xObj instanceof String) {
-                x = Double.parseDouble((String) xObj);
-            } else if (xObj instanceof Number) {
-                x = ((Number) xObj).doubleValue();
-            } else {
-                Log.w(TAG, "Geçersiz X koordinatı: " + xObj);
-                return;
-            }
 
-            if (yObj instanceof String) {
-                y = Double.parseDouble((String) yObj);
-            } else if (yObj instanceof Number) {
-                y = ((Number) yObj).doubleValue();
-            } else {
-                Log.w(TAG, "Geçersiz Y koordinatı: " + yObj);
-                return;
-            }
-
-            // Koordinat kontrolü (Kayseri sınırları)
             if (x < 34.0 || x > 37.0 || y < 37.5 || y > 39.5) {
                 Log.w(TAG, "Kayseri sınırları dışında koordinat: " + x + "," + y);
                 return;
             }
 
-            LatLng position = new LatLng(y, x); // Dikkat: Y=latitude, X=longitude
+            LatLng position = new LatLng(y, x);
 
-            // Kaza bilgilerini al
             String ilce = getStringValue(kazaSnapshot, "ILCE");
             String mahalle = getStringValue(kazaSnapshot, "MAHALLE");
             String yol = getStringValue(kazaSnapshot, "YOL");
             String saat = getStringValue(kazaSnapshot, "KAZA SAAT");
             String dakika = getStringValue(kazaSnapshot, "KAZA DAKIKA");
 
-            // Marker title ve snippet oluştur
             String title = kazaTuru.equals("olumlu") ? "🔴 ÖLÜMLÜ KAZA" : "🟡 YARALI KAZA";
             String snippet = String.format("%s - %s\n%s\nSaat: %s:%s",
                     ilce != null ? ilce : "Bilinmiyor",
@@ -243,12 +270,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     saat != null ? saat : "?",
                     dakika != null ? dakika : "?");
 
-            // Marker rengini belirle
             float markerColor = kazaTuru.equals("olumlu") ?
                     BitmapDescriptorFactory.HUE_RED :
                     BitmapDescriptorFactory.HUE_YELLOW;
 
-            // Marker'ı haritaya ekle
             MarkerOptions markerOptions = new MarkerOptions()
                     .position(position)
                     .title(title)
@@ -256,13 +281,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                     .icon(BitmapDescriptorFactory.defaultMarker(markerColor));
 
             Marker marker = mMap.addMarker(markerOptions);
-
-            // Marker'a kaza verilerini tag olarak ekle
             if (marker != null) {
                 marker.setTag(new KazaData(kazaSnapshot, kazaTuru));
+                kazaDataList.add(new KazaData(kazaSnapshot, kazaTuru));
             }
 
-            // Sayacı artır
             if (kazaTuru.equals("olumlu")) {
                 olumluMarkerCount++;
             } else {
@@ -286,7 +309,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         KazaData kazaData = (KazaData) marker.getTag();
         if (kazaData == null) return;
 
-        // Detaylı bilgi dialog'u göster
         StringBuilder details = new StringBuilder();
         details.append("🏢 İlçe: ").append(kazaData.ilce).append("\n");
         details.append("🏘️ Mahalle: ").append(kazaData.mahalle).append("\n");
@@ -305,7 +327,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 .show();
     }
 
-    // Kaza verilerini tutan sınıf
     private static class KazaData {
         String ilce, mahalle, yol, saat, dakika, kazaTuru;
         double x, y;
@@ -328,6 +349,108 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         private static String getStringValue(DataSnapshot snapshot, String key) {
             Object value = snapshot.child(key).getValue();
             return value != null ? value.toString().trim() : "Bilinmiyor";
+        }
+    }
+
+    private void getLastKnownLocation() {
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        fusedLocationClient.getLastLocation()
+                .addOnSuccessListener(this, location -> {
+                    if (location != null) {
+                        updateLocationOnMap(location);
+                        startSimulatedMovement();
+                    }
+                });
+    }
+
+    private void updateLocationOnMap(Location location) {
+        if (location == null) return;
+        currentLocation = new LatLng(location.getLatitude(), location.getLongitude());
+        if (userMarker != null) {
+            userMarker.remove();
+        }
+        userMarker = mMap.addMarker(new MarkerOptions().position(currentLocation).title("Benim Konumum").icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+        lastKnownLocation = location;
+    }
+
+    // onMapClick metodunu düzgün şekilde implement edin
+    @Override
+    public void onMapClick(LatLng latLng) {
+        Log.d(TAG, "Harita tıklandı: " + latLng.latitude + ", " + latLng.longitude);
+
+        manualLocationChange = true; // Manuel konum değişikliği olduğunu belirtin
+        Location newLocation = new Location("manual");
+        newLocation.setLatitude(latLng.latitude);
+        newLocation.setLongitude(latLng.longitude);
+        updateLocationOnMap(newLocation);
+        checkProximityToAccidents();
+        manualLocationChange = false; // Manuel değişikliğin bittiğini belirtin
+
+        // Kullanıcıya geri bildirim verin
+        Toast.makeText(this, "Konum güncellendi: " + String.format("%.6f, %.6f", latLng.latitude, latLng.longitude), Toast.LENGTH_SHORT).show();
+    }
+
+    private void startSimulatedMovement() {
+        simulateMovement = () -> {
+            if (!locationUpdatesEnabled || lastKnownLocation == null || manualLocationChange) return;
+
+            Random random = new Random();
+            double latOffset = (random.nextDouble() - 0.5) / 500; //Daha küçük hareketler
+            double lngOffset = (random.nextDouble() - 0.5) / 500;
+
+            double newLat = lastKnownLocation.getLatitude() + latOffset;
+            double newLng = lastKnownLocation.getLongitude() + lngOffset;
+
+            Location simulatedLocation = new Location("simulated");
+            simulatedLocation.setLatitude(newLat);
+            simulatedLocation.setLongitude(newLng);
+            updateLocationOnMap(simulatedLocation);
+            checkProximityToAccidents();
+            handler.postDelayed(simulateMovement, SIMULATED_MOVEMENT_INTERVAL_MS);
+        };
+
+        handler.postDelayed(simulateMovement, SIMULATED_MOVEMENT_INTERVAL_MS);
+    }
+
+    @Override
+    public void onMyLocationChange(Location location) {
+        // Gerçek konum değiştiğinde bu fonksiyon çağrılır
+        updateLocationOnMap(location);
+        checkProximityToAccidents();
+    }
+
+
+    private void checkProximityToAccidents() {
+        if (currentLocation == null || kazaDataList.isEmpty()) return;
+
+        for (KazaData kaza : kazaDataList) {
+            float[] results = new float[1];
+            Location.distanceBetween(currentLocation.latitude, currentLocation.longitude, kaza.y, kaza.x, results);
+            float distance = results[0];
+
+            if (distance <= PROXIMITY_THRESHOLD_METERS) {
+                String warningMessage = "Yakınlarda " + (kaza.kazaTuru.equals("olumlu") ? "ölümlü" : "yaralı") + " kaza tespit edildi! (" + Math.round(distance) + "m)";
+                Toast.makeText(this, warningMessage, Toast.LENGTH_LONG).show();
+                Log.d(TAG, "Yakınlık uyarısı: " + warningMessage);
+            }
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (handler != null && simulateMovement != null) {
+            handler.removeCallbacks(simulateMovement);
+        }
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (handler != null && simulateMovement != null) {
+            handler.removeCallbacks(simulateMovement);
         }
     }
 }

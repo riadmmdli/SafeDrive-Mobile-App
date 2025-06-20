@@ -1,142 +1,158 @@
 <?xml version="1.0" encoding="utf-8"?>
 <RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context=".MapsActivity">
 
-    <!-- Google Maps Fragment -->
+    <!-- Harita Fragment'i -->
     <fragment
         android:id="@+id/map"
         android:name="com.google.android.gms.maps.SupportMapFragment"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        tools:context=".MapsActivity" />
+        android:layout_height="match_parent" />
 
-    <!-- Üst Panel - İstatistikler -->
+    <!-- Üst İstatistik Paneli -->
     <LinearLayout
         android:id="@+id/statsPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_alignParentTop="true"
-        android:background="@drawable/stats_panel_background"
+        android:layout_marginTop="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:background="@drawable/rounded_white_background"
+        android:elevation="4dp"
         android:orientation="horizontal"
-        android:padding="12dp"
-        android:layout_margin="8dp"
-        android:elevation="4dp">
+        android:padding="12dp">
 
         <!-- Ölümlü Kaza Sayısı -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🔴"
-                android:textSize="24sp"
-                android:layout_marginBottom="4dp" />
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvOlumluCount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="0"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@color/red_marker" />
+                android:textColor="#D32F2F"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Ölümlü"
-                android:textSize="12sp"
-                android:textColor="@color/secondary_text" />
+                android:textColor="#666666"
+                android:textSize="12sp" />
 
         </LinearLayout>
-
-        <!-- Dikey Ayırıcı -->
-        <View
-            android:layout_width="1dp"
-            android:layout_height="match_parent"
-            android:background="@color/divider_color"
-            android:layout_marginVertical="8dp" />
 
         <!-- Yaralı Kaza Sayısı -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="🟡"
-                android:textSize="24sp"
-                android:layout_marginBottom="4dp" />
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvYaraliCount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="0"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@color/yellow_marker" />
+                android:textColor="#FF9800"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Yaralı"
-                android:textSize="12sp"
-                android:textColor="@color/secondary_text" />
+                android:textColor="#666666"
+                android:textSize="12sp" />
 
         </LinearLayout>
 
-        <!-- Toplam -->
+        <!-- Toplam Kaza Sayısı -->
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:orientation="vertical"
             android:gravity="center"
-            android:padding="8dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="📊"
-                android:textSize="24sp"
-                android:layout_marginBottom="4dp" />
+            android:orientation="vertical">
 
             <TextView
                 android:id="@+id/tvTotalCount"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="0"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                android:textColor="@color/primary_text" />
+                android:textColor="#2196F3"
+                android:textSize="20sp"
+                android:textStyle="bold" />
 
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="Toplam"
-                android:textSize="12sp"
-                android:textColor="@color/secondary_text" />
+                android:textColor="#666666"
+                android:textSize="12sp" />
 
         </LinearLayout>
 
     </LinearLayout>
 
-    <!-- Yükleniyor İndikatörü -->
+    <!-- Uyarı Kartı -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/warningCard"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_below="@+id/statsPanel"
+        android:layout_marginTop="8dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="8dp"
+        android:elevation="6dp"
+        app:cardCornerRadius="8dp"
+        app:cardUseCompatPadding="true"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:padding="16dp"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvWarningText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="Uyarı metni"
+                android:textColor="#000000"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:layout_marginStart="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:background="?android:attr/selectableItemBackgroundBorderless" />
+
+        </LinearLayout>
+
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Yükleme Paneli -->
     <LinearLayout
         android:id="@+id/loadingPanel"
         android:layout_width="wrap_content"
@@ -144,37 +160,63 @@
         android:layout_centerInParent="true"
         android:orientation="vertical"
         android:padding="24dp"
-        android:background="@drawable/loading_panel_background"
-        android:gravity="center"
+        android:background="@drawable/rounded_white_background"
         android:elevation="8dp"
+        android:gravity="center"
         android:visibility="gone">
 
         <ProgressBar
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginBottom="16dp"
-            android:indeterminateTint="@color/primary_color" />
+            android:layout_marginBottom="16dp" />
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="Kaza verileri yükleniyor..."
-            android:textSize="16sp"
-            android:textColor="@color/primary_text" />
+            android:textColor="#666666"
+            android:textSize="14sp" />
 
     </LinearLayout>
 
-    <!-- Geri Dön Butonu -->
+    <!-- Floating Action Buttons -->
+    <!-- Geri Dönüş Butonu -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabBack"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentBottom="true"
         android:layout_alignParentStart="true"
-        android:layout_margin="16dp"
-        android:src="@drawable/ic_arrow_back"
-        android:contentDescription="Geri Dön"
-        android:backgroundTint="@color/primary_color"
-        android:tint="@android:color/white" />
+        android:layout_alignParentBottom="true"
+        android:layout_marginStart="16dp"
+        android:layout_marginBottom="16dp"
+        android:src="@android:drawable/ic_menu_revert"
+        app:tint="@android:color/white"
+        app:backgroundTint="#2196F3" />
+
+    <!-- Konumum Butonu -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabMyLocation"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="88dp"
+        android:src="@android:drawable/ic_menu_mylocation"
+        app:tint="@android:color/white"
+        app:backgroundTint="#4CAF50" />
+
+    <!-- Yakınlık Uyarısı Toggle Butonu -->
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
+        android:id="@+id/fabProximityToggle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_alignParentEnd="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        android:src="@android:drawable/ic_dialog_alert"
+        app:tint="@android:color/white"
+        app:backgroundTint="#FF9800" />
 
 </RelativeLayout>

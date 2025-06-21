@@ -61,7 +61,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private Runnable simulateMovement;
 
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
-    private static final float PROXIMITY_THRESHOLD_METERS = 200;
+    private static final float PROXIMITY_THRESHOLD_METERS = 50;
     private static final long SIMULATED_MOVEMENT_INTERVAL_MS = 2000; // 2 seconds
 
     // ... variables ...

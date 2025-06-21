@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Uygulama Adı -->
-    <string name="app_name">Kaza Uyarı Sistemi</string>
+    <string name="app_name">Safe Drive</string>
     <string name="title_activity_maps">Kaza Haritası</string>
 
     <!-- Ana Ekran -->
-    <string name="main_title">🚨 KAZA UYARI SİSTEMİ</string>
+    <string name="main_title">🚨 SAFE DRIVE</string>
     <string name="main_subtitle">Kayseri Trafik Kazaları</string>
     <string name="btn_open_map">🗺️ HARİTAYI AÇ</string>
     <string name="btn_about">ℹ️ HAKKINDA</string>

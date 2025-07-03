@@ -482,33 +482,31 @@ public class WeatherSpeedInfoManager {
         }
 
         KazaData nearestKaza = findNearestAccident();
-        String infoText;
+        StringBuilder infoText = new StringBuilder();
+
+        infoText.append("📍 Mevcut Konum Bilgileri:\n\n");
+        infoText.append("🌤️ Anlık Hava Durumu: ").append(currentWeatherDescription).append("\n");
+        infoText.append("📍 Koordinat: ").append(String.format("%.6f, %.6f",
+                currentLocation.getLatitude(), currentLocation.getLongitude())).append("\n");
+        infoText.append("🎯 Konum Tipi: ").append(isManualLocation ? "Manuel Seçim" : "GPS Konumu").append("\n");
 
         if (nearestKaza != null) {
-            infoText = "📍 Yakın Kaza Bölgesi Bilgileri:\n\n" +
-                    "🏢 İlçe: " + nearestKaza.ilce + "\n" +
-                    "🏘️ Mahalle: " + nearestKaza.mahalle + "\n" +
-                    "🌤️ Anlık Hava Durumu: " + currentWeatherDescription + "\n" +
-                    "🌩️ Kaza Anı Hava Durumu: " + nearestKaza.havaDurumu + "\n" +
-                    "🚗 Hız Limiti: " + (nearestKaza.yasalHizLimiti != null ?
-                    nearestKaza.yasalHizLimiti + " km/h" : "Belirtilmemiş") + "\n" +
-                    "⚠️ Kaza Türü: " + (nearestKaza.kazaTuru.equals("olumlu") ? "Ölümlü" : "Yaralı") + "\n" +
-                    "📍 Koordinat: " + String.format("%.6f, %.6f",
-                    currentLocation.getLatitude(), currentLocation.getLongitude()) + "\n" +
-                    "🎯 Konum Tipi: " + (isManualLocation ? "Manuel Seçim" : "GPS Konumu");
+            infoText.append("\n📍 Yakın Kaza Bilgileri:\n\n");
+            infoText.append("🏢 İlçe: ").append(nearestKaza.ilce).append("\n");
+            infoText.append("🏘️ Mahalle: ").append(nearestKaza.mahalle).append("\n");
+            infoText.append("🌩️ Kaza Anı Hava Durumu: ").append(nearestKaza.havaDurumu).append("\n");
+            infoText.append("🚗 Hız Limiti: ").append(nearestKaza.yasalHizLimiti != null
+                    ? nearestKaza.yasalHizLimiti + " km/h" : "Belirtilmemiş").append("\n");
+            infoText.append("⚠️ Kaza Türü: ").append(nearestKaza.kazaTuru.equals("olumlu")
+                    ? "Ölümlü" : "Yaralı").append("\n");
         } else {
-            infoText = "📍 Mevcut Konum Bilgileri:\n\n" +
-                    "🌤️ Anlık Hava Durumu: " + currentWeatherDescription + "\n" +
-                    "🚗 Tahmini Hız Limiti: " + simulateSpeedLimitForLocation() + " km/h\n" +
-                    "📍 Koordinat: " + String.format("%.6f, %.6f",
-                    currentLocation.getLatitude(), currentLocation.getLongitude()) + "\n" +
-                    "🎯 Konum Tipi: " + (isManualLocation ? "Manuel Seçim" : "GPS Konumu") + "\n" +
-                    "ℹ️ Yakında kaza verisi bulunmuyor";
+            infoText.append("\nℹ️ Yakında kaza verisi bulunmuyor\n");
+            infoText.append("🚗 Tahmini Hız Limiti: ").append(simulateSpeedLimitForLocation()).append(" km/h\n");
         }
 
         new androidx.appcompat.app.AlertDialog.Builder(context)
                 .setTitle("🌍 Konum Bilgileri")
-                .setMessage(infoText)
+                .setMessage(infoText.toString())
                 .setPositiveButton("Tamam", null)
                 .show();
     }

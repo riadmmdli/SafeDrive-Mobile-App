@@ -222,6 +222,21 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     @Override
     public void onMapClick(LatLng latLng) {
         mapManager.onMapClick(latLng);
+
+        // Manuel konum değişikliği için weatherSpeedManager'ı güncelle
+        manualLocationChange = true;
+        stopSimulatedMovement();
+
+        // weatherSpeedManager'a manuel konum bilgisini gönder
+        weatherSpeedManager.updateLocationFromMapSelection(
+                latLng.latitude,
+                latLng.longitude,
+                firebaseDataManager.getKazaDataList()
+        );
+
+        Toast.makeText(this, "Manuel konum seçildi: " +
+                        String.format("%.6f, %.6f", latLng.latitude, latLng.longitude),
+                Toast.LENGTH_SHORT).show();
     }
 
     private void showLoading(boolean show) {

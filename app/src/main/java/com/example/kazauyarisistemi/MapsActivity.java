@@ -114,8 +114,14 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             } else {
                 // Normal işlem - mevcut konuma odaklan
                 mapManager.testProximitySystem();
+
                 if (currentLocation != null) {
                     mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(currentLocation, 15));
+                } else if (lastKnownLocation != null) {
+                    mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(
+                            new LatLng(lastKnownLocation.getLatitude(), lastKnownLocation.getLongitude()), 15));
+                } else {
+                    Toast.makeText(this, "Konum bilgisi bulunamadı.", Toast.LENGTH_SHORT).show();
                 }
             }
         });
@@ -216,6 +222,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         // Manuel konum değişikliği değilse lastKnownLocation'ı güncelle
         if (!manualLocationChange) {
             lastKnownLocation = location;
+            currentLocation = new LatLng(location.getLatitude(), location.getLongitude()); // EKLENDİ
         }
     }
 

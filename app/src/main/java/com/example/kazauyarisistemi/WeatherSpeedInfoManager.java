@@ -193,24 +193,8 @@ public class WeatherSpeedInfoManager {
     }
 
     private Integer simulateSpeedLimitForLocation() {
-        Integer[] speedLimits = {30, 50, 70, 90, 110, 120};
-
-        if (currentLocation != null) {
-            double distanceFromCenter = calculateDistance(
-                    currentLocation.getLatitude(), currentLocation.getLongitude(),
-                    38.7312, 35.4787 // Kayseri merkezi koordinatları
-            );
-
-            if (distanceFromCenter < 5) {
-                return speedLimits[new java.util.Random().nextInt(3)];
-            } else if (distanceFromCenter < 15) {
-                return speedLimits[3 + new java.util.Random().nextInt(2)];
-            } else {
-                return speedLimits[5];
-            }
-        }
-
-        return 50;
+        // Veri setinde bulunmayan konumlar için "Bilinmiyor" döndür
+        return null; // Bu null değeri "Bilinmiyor" olarak gösterilecek
     }
 
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -403,18 +387,20 @@ public class WeatherSpeedInfoManager {
     }
 
     private void updateSpeedInfo(Integer speedLimit) {
-        if (speedLimit == null || speedLimit <= 0) {
-            speedLimit = simulateSpeedLimitForLocation();
-        }
-
         speedIcon.setImageResource(R.drawable.ic_speed_limit);
-        speedText.setText(speedLimit + " km/h");
 
-        int speedColor = getSpeedLimitColor(speedLimit);
-        speedIcon.setColorFilter(ContextCompat.getColor(context, speedColor));
-        speedText.setTextColor(ContextCompat.getColor(context, speedColor));
-
-        Log.d(TAG, "Hız limiti güncellendi: " + speedLimit + " km/h");
+        if (speedLimit == null || speedLimit <= 0) {
+            speedText.setText("Bilinmiyor");
+            speedIcon.setColorFilter(ContextCompat.getColor(context, android.R.color.darker_gray));
+            speedText.setTextColor(ContextCompat.getColor(context, android.R.color.darker_gray));
+            Log.d(TAG, "Hız limiti güncellendi: Bilinmiyor");
+        } else {
+            speedText.setText(speedLimit + " km/h");
+            int speedColor = getSpeedLimitColor(speedLimit);
+            speedIcon.setColorFilter(ContextCompat.getColor(context, speedColor));
+            speedText.setTextColor(ContextCompat.getColor(context, speedColor));
+            Log.d(TAG, "Hız limiti güncellendi: " + speedLimit + " km/h");
+        }
     }
 
     private int getWeatherIcon(String weather) {
@@ -482,10 +468,13 @@ public class WeatherSpeedInfoManager {
         }
 
         KazaData nearestKaza = findNearestAccident();
+        Integer roadSpeedLimit = getSpeedLimitForCurrentRoad();
         StringBuilder infoText = new StringBuilder();
 
         infoText.append("📍 Mevcut Konum Bilgileri:\n\n");
         infoText.append("🌤️ Anlık Hava Durumu: ").append(currentWeatherDescription).append("\n");
+        infoText.append("🚗 Yol Boyunca Ortalama Hız Limiti: ")
+                .append(roadSpeedLimit != null ? roadSpeedLimit + " km/h" : "Belirtilmemiş").append("\n");
         infoText.append("📍 Koordinat: ").append(String.format("%.6f, %.6f",
                 currentLocation.getLatitude(), currentLocation.getLongitude())).append("\n");
         infoText.append("🎯 Konum Tipi: ").append(isManualLocation ? "Manuel Seçim" : "GPS Konumu").append("\n");
@@ -494,14 +483,12 @@ public class WeatherSpeedInfoManager {
             infoText.append("\n📍 Yakın Kaza Bilgileri:\n\n");
             infoText.append("🏢 İlçe: ").append(nearestKaza.ilce).append("\n");
             infoText.append("🏘️ Mahalle: ").append(nearestKaza.mahalle).append("\n");
+            infoText.append("🛣️ Yol: ").append(nearestKaza.yol != null ? nearestKaza.yol : "Bilinmiyor").append("\n");
+
             infoText.append("🌩️ Kaza Anı Hava Durumu: ").append(nearestKaza.havaDurumu).append("\n");
-            infoText.append("🚗 Hız Limiti: ").append(nearestKaza.yasalHizLimiti != null
-                    ? nearestKaza.yasalHizLimiti + " km/h" : "Belirtilmemiş").append("\n");
-            infoText.append("⚠️ Kaza Türü: ").append(nearestKaza.kazaTuru.equals("olumlu")
-                    ? "Ölümlü" : "Yaralı").append("\n");
+            infoText.append("⚠️ Kaza Türü: ").append(nearestKaza.kazaTuru.equals("olumlu") ? "Ölümlü" : "Yaralı").append("\n");
         } else {
             infoText.append("\nℹ️ Yakında kaza verisi bulunmuyor\n");
-            infoText.append("🚗 Tahmini Hız Limiti: ").append(simulateSpeedLimitForLocation()).append(" km/h\n");
         }
 
         new androidx.appcompat.app.AlertDialog.Builder(context)
@@ -541,4 +528,29 @@ public class WeatherSpeedInfoManager {
     public boolean isManualLocation() {
         return isManualLocation;
     }
+    private Integer getSpeedLimitForCurrentRoad() {
+        if (currentLocation == null || kazaDataList == null) return null;
+
+        KazaData nearest = findNearestAccident();
+        if (nearest == null || nearest.yol == null || nearest.yol.equals("Bilinmiyor")) return null;
+
+        String currentRoad = nearest.yol;
+        int total = 0, count = 0;
+
+        for (KazaData kaza : kazaDataList) {
+            if (currentRoad.equals(kaza.yol) && kaza.yasalHizLimiti != null) {
+                total += kaza.yasalHizLimiti;
+                count++;
+            }
+        }
+
+        if (count > 0) {
+            return Math.round((float) total / count);
+        }
+
+        return null;
+    }
+
+
+
 }

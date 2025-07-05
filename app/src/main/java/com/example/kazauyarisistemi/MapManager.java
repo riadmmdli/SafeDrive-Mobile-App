@@ -2,6 +2,7 @@ package com.example.kazauyarisistemi;
 
 import android.content.Context;
 import android.location.Location;
+import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -20,10 +21,11 @@ import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 import java.util.List;
+import java.util.Locale;
 
 public class MapManager {
     private static final String TAG = "MapManager";
-    private static final float PROXIMITY_THRESHOLD_METERS = 50;
+    private static final float PROXIMITY_THRESHOLD_METERS = 100;
     private GoogleMap mMap;
     private LatLng currentLocation;
     private Marker userMarker;
@@ -32,14 +34,21 @@ public class MapManager {
     private boolean manualLocationChange = false;
     private Context context;
     private MapsActivity mapsActivity;
-    // WeatherSpeedInfoManager referansı eklendi
     private WeatherSpeedInfoManager weatherSpeedInfoManager;
+
+    private TextToSpeech textToSpeech;
 
     public MapManager(Context context, GoogleMap googleMap, LinearLayout warningLayout) {
         this.context = context;
         this.mMap = googleMap;
         this.warningLayout = warningLayout;
         this.mapsActivity = (MapsActivity) context;
+
+        textToSpeech = new TextToSpeech(context.getApplicationContext(), status -> {
+            if (status != TextToSpeech.ERROR) {
+                textToSpeech.setLanguage(new Locale("tr", "TR"));
+            }
+        });
 
         mMap.setOnMarkerClickListener(marker -> {
             String title = marker.getTitle();
@@ -51,7 +60,6 @@ public class MapManager {
         });
     }
 
-    // WeatherSpeedInfoManager'ı set etmek için method eklendi
     public void setWeatherSpeedInfoManager(WeatherSpeedInfoManager weatherSpeedInfoManager) {
         this.weatherSpeedInfoManager = weatherSpeedInfoManager;
     }
@@ -102,21 +110,17 @@ public class MapManager {
             userMarker.remove();
         }
 
-        // Manuel konum mu otomatik konum mu göster
         float markerColor = manualLocationChange ?
                 BitmapDescriptorFactory.HUE_GREEN :
                 BitmapDescriptorFactory.HUE_BLUE;
 
-        String markerTitle = manualLocationChange ?
-                "Manuel Konum" :
-                "Benim Konumum";
+        String markerTitle = manualLocationChange ? "Manuel Konum" : "Benim Konumum";
 
         userMarker = mMap.addMarker(new MarkerOptions()
                 .position(currentLocation)
                 .title(markerTitle)
                 .icon(BitmapDescriptorFactory.defaultMarker(markerColor)));
 
-        // WeatherSpeedInfoManager'ı güncelle - BU SATIRLARI EKLEDİK
         if (weatherSpeedInfoManager != null) {
             weatherSpeedInfoManager.updateLocation(location, kazaDataList);
             Log.d(TAG, "WeatherSpeedInfoManager updated with new location");
@@ -127,14 +131,11 @@ public class MapManager {
 
     public void onMapClick(LatLng latLng) {
         Log.d(TAG, "Map clicked: " + latLng.latitude + ", " + latLng.longitude);
-
-        // Manuel konum değişikliği bayrağını ayarla
         manualLocationChange = true;
 
-        // MapsActivity'ye manuel konum değişikliğini bildir
         if (mapsActivity != null) {
             mapsActivity.setManualLocationChange(true);
-            mapsActivity.stopSimulatedMovement(); // Simülasyonu durdur
+            mapsActivity.stopSimulatedMovement();
         }
 
         Location newLocation = new Location("manual");
@@ -142,10 +143,8 @@ public class MapManager {
         newLocation.setLongitude(latLng.longitude);
 
         hideWarning();
-
         updateLocationOnMap(newLocation, kazaDataList);
 
-        // Manuel konum değişikliğinde hava durumunu zorla güncelle
         if (weatherSpeedInfoManager != null) {
             weatherSpeedInfoManager.forceWeatherUpdate();
         }
@@ -164,7 +163,6 @@ public class MapManager {
         details.append("🛣️ Yol: ").append(kazaData.yol).append("\n");
         details.append("⏰ Saat: ").append(kazaData.saat).append(":").append(kazaData.dakika).append("\n");
 
-        // Yeni alanlar
         if (kazaData.kazaTarihi != null && !kazaData.kazaTarihi.equals("Bilinmiyor")) {
             details.append("📅 Tarih: ").append(kazaData.kazaTarihi).append("\n");
         }
@@ -213,7 +211,6 @@ public class MapManager {
                     " kaza!\nMesafe: " + Math.round(distance) + "m\n" +
                     "Konum: " + kaza.ilce + " - " + kaza.mahalle;
 
-            // Hava durumu ve hız limiti bilgilerini burada ekleyin
             if (kaza.havaDurumu != null && !kaza.havaDurumu.equals("Bilinmiyor")) {
                 warningText += "\n🌤️ Hava: " + kaza.havaDurumu;
             }
@@ -222,21 +219,74 @@ public class MapManager {
             }
 
             warningTextView.setText(warningText);
-
             closeWarning.setOnClickListener(v -> hideWarning());
 
             warningLayout.addView(warningView);
             warningLayout.setVisibility(View.VISIBLE);
 
             Log.d(TAG, "WARNING DISPLAYED: " + warningText);
-
             Toast.makeText(context, warningText, Toast.LENGTH_LONG).show();
+
+            speakWarning(kaza, distance);
         });
+    }
+
+    private void speakWarning(KazaData kaza, float distance) {
+        if (textToSpeech == null) return;
+
+        // Fonetik okunuşları kullan
+        String ilce = getPhoneticText(kaza.ilce);
+        String mahalle = getPhoneticText(kaza.mahalle);
+
+        String speechText = "Dikkat! Yakınlarda " +
+                (kaza.kazaTuru.equals("olumlu") ? "ölümlü" : "yaralanmalı") +
+                " bir kaza var. Mesafe yaklaşık " + Math.round(distance) + " metre. " +
+                ilce + " ilçesi, " + mahalle + " mahallesi.";
+
+        textToSpeech.stop(); // Önceki konuşmayı durdur
+        textToSpeech.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "UYARI_ID");
+    }
+
+    private String getPhoneticText(String text) {
+        if (text == null) return "";
+
+        // İlçe adları (büyük/küçük harf duyarsız)
+        text = text.replaceAll("(?i)kocasinan", "Ko-ca-si-nan");
+        text = text.replaceAll("(?i)melikgazi", "Me-lik-ga-zi");
+        text = text.replaceAll("(?i)talas", "Ta-las");
+
+        // Mahalle adları
+        text = text.replaceAll("(?i)yeniköy", "Ye-ni-köy");
+        text = text.replaceAll("(?i)esentepe", "E-sen-te-pe");
+        text = text.replaceAll("(?i)fevzi çakmak", "Fev-zi Çak-mak");
+        text = text.replaceAll("(?i)ismet paşa", "İs-met Pa-şa");
+        text = text.replaceAll("(?i)yıldırım beyazıt", "Yıl-dı-rım Be-ya-zıt");
+        text = text.replaceAll("(?i)erciyes", "Er-ci-yes");
+        text = text.replaceAll("(?i)zümrüt", "Züm-rüt");
+        text = text.replaceAll("(?i)bahçelievler", "Bah-çe-li-ev-ler");
+        text = text.replaceAll("(?i)anbar", "An-bar");
+        text = text.replaceAll("(?i)eki̇nli̇k", "E-kin-lik");
+        text = text.replaceAll("(?i)gültepe", "Gül-te-pe");
+        text = text.replaceAll("(?i)sanayi", "Sa-na-yi");
+        text = text.replaceAll("(?i)kayabasi", "Ka-ya-ba-şı");
+
+        // Tire yerine duraklama için virgül
+        text = text.replaceAll(" - ", ", ");
+
+        return text;
     }
 
     public void hideWarning() {
         if (warningLayout != null) {
             warningLayout.setVisibility(View.GONE);
+        }
+    }
+
+    public void shutdownTextToSpeech() {
+        if (textToSpeech != null) {
+            textToSpeech.stop();
+            textToSpeech.shutdown();
+            textToSpeech = null;
         }
     }
 
@@ -246,34 +296,21 @@ public class MapManager {
             return;
         }
 
-        Log.d(TAG, "Current location: " + currentLocation.latitude + ", " + currentLocation.longitude);
-        Log.d(TAG, "Checking proximity with " + kazaDataList.size() + " kaza data");
-
         for (KazaData kaza : kazaDataList) {
             float[] results = new float[1];
             Location.distanceBetween(currentLocation.latitude, currentLocation.longitude,
                     kaza.y, kaza.x, results);
 
             float distance = results[0];
-            Log.d(TAG, "Distance to " + kaza.ilce + " (" + kaza.y + "," + kaza.x + "): " + distance + "m");
-
             if (distance <= PROXIMITY_THRESHOLD_METERS) {
-                Log.d(TAG, "PROXIMITY ALERT! Distance: " + distance + "m to " + kaza.ilce);
                 showWarning(kaza, distance);
-                return; // İlk uyarıyı göster ve çık
+                return;
             }
         }
     }
 
     public void testProximitySystem() {
-        Log.d(TAG, "=== PROXIMITY SYSTEM TEST ===");
-        Log.d(TAG, "Current location: " + (currentLocation != null ?
-                currentLocation.latitude + "," + currentLocation.longitude : "NULL"));
-        Log.d(TAG, "Kaza data count: " + (kazaDataList != null ? kazaDataList.size() : 0));
-        Log.d(TAG, "Proximity threshold: " + PROXIMITY_THRESHOLD_METERS + "m");
-
         if (currentLocation != null && kazaDataList != null && !kazaDataList.isEmpty()) {
-            Log.d(TAG, "Testing proximity for first 5 accidents:");
             for (int i = 0; i < Math.min(5, kazaDataList.size()); i++) {
                 KazaData kaza = kazaDataList.get(i);
                 float[] results = new float[1];

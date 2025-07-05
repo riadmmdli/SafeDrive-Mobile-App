@@ -10,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Bundle;
 import android.os.Handler;
+import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
@@ -24,10 +25,10 @@ import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.model.LatLng;
-import com.google.android.gms.maps.model.Marker;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
 
 public class MapsActivity extends FragmentActivity implements OnMapReadyCallback, GoogleMap.OnMyLocationChangeListener, GoogleMap.OnMapClickListener {
@@ -43,7 +44,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private static final long SIMULATED_MOVEMENT_INTERVAL_MS = 2000; // 2 saniye
 
     private FusedLocationProviderClient fusedLocationClient;
-    private Marker userMarker;
     private LatLng currentLocation;
     private Handler handler = new Handler();
     private Runnable simulateMovement;
@@ -54,18 +54,20 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private static final int LOCATION_PERMISSION_REQUEST_CODE = 1;
     private LinearLayout warningLayout;
     private boolean isLocationUpdateInProgress = false;
-    private FloatingActionButton fabMyLocation, fabProximityToggle;
     private WeatherSpeedInfoManager weatherSpeedManager;
     private View infoPanelContainer;
     private ImageView weatherIcon, speedIcon, infoButton;
     private TextView weatherText, speedText;
     private FloatingActionButton fabToggleInfo;
 
+    // TextToSpeech objesi
+    private TextToSpeech tts;
+    private boolean ttsReady = false;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_maps);
-
 
         tvOlumluCount = findViewById(R.id.tvOlumluCount);
         tvYaraliCount = findViewById(R.id.tvYaraliCount);
@@ -85,17 +87,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 this, infoPanelContainer, weatherIcon, weatherText, speedIcon, speedText
         );
 
-
-
         firebaseDataManager = new FirebaseDataManager(this);
-
 
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
         SupportMapFragment mapFragment = (SupportMapFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
-
 
         fabBack.setOnClickListener(v -> finish());
 
@@ -126,9 +124,23 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             }
         });
 
+        // TextToSpeech'i başlat
+        tts = new TextToSpeech(this, status -> {
+            if (status == TextToSpeech.SUCCESS) {
+                int result = tts.setLanguage(new Locale("tr", "TR"));
+                if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                    Log.e(TAG, "TTS: Türkçe dili desteklenmiyor");
+                    ttsReady = false;
+                } else {
+                    ttsReady = true;
+                }
+            } else {
+                Log.e(TAG, "TTS başlatılamadı");
+                ttsReady = false;
+            }
+        });
 
         requestLocationPermission();
-
     }
 
     private void requestLocationPermission() {
@@ -145,20 +157,17 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         if (requestCode == LOCATION_PERMISSION_REQUEST_CODE) {
             if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                // İzin verildi, konum güncellemelerine devam et
                 getLastKnownLocation();
             } else {
-                // İzin reddedildi, kullanıcıya bilgi ver
                 Toast.makeText(this, "Konum izni gereklidir.", Toast.LENGTH_SHORT).show();
             }
         }
     }
 
-
-
     @Override
     public void onMapReady(@NonNull GoogleMap googleMap) {
         mMap = googleMap;
+
         mapManager = new MapManager(this, mMap, warningLayout);
 
         mMap.setMapType(GoogleMap.MAP_TYPE_NORMAL);
@@ -166,7 +175,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         mMap.getUiSettings().setCompassEnabled(true);
         mMap.getUiSettings().setMyLocationButtonEnabled(true);
         mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(KAYSERI_CENTER, 12));
-
 
         mMap.setOnMapClickListener(this);
         mMap.setOnMyLocationChangeListener(this);
@@ -177,18 +185,22 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
                 mapManager.addKazaMarker(kaza);
             }
             showLoading(false);
-            updateStatistics(kazaDataList); // İstatistikleri güncelle
+            updateStatistics(kazaDataList);
             Toast.makeText(MapsActivity.this, "Kaza verileri yüklendi.", Toast.LENGTH_SHORT).show();
+
+            // Kaza verileri yüklendikten sonra sesi oynat
+            if (ttsReady) {
+                tts.speak("Yolunuz açık olsun", TextToSpeech.QUEUE_FLUSH, null, "YolunuzAcikOlsunID");
+            }
         });
 
         enableMyLocationIfPermitted();
-
     }
 
     private void enableMyLocationIfPermitted() {
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             mMap.setMyLocationEnabled(true);
-            startLocationUpdates(); // Konum izni varsa güncellemeleri başlat
+            startLocationUpdates();
         }
     }
 
@@ -214,15 +226,13 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         });
     }
 
-
     private void updateLocationOnMap(Location location) {
         mapManager.updateLocationOnMap(location, firebaseDataManager.getKazaDataList());
         weatherSpeedManager.updateLocation(location, firebaseDataManager.getKazaDataList());
 
-        // Manuel konum değişikliği değilse lastKnownLocation'ı güncelle
         if (!manualLocationChange) {
             lastKnownLocation = location;
-            currentLocation = new LatLng(location.getLatitude(), location.getLongitude()); // EKLENDİ
+            currentLocation = new LatLng(location.getLatitude(), location.getLongitude());
         }
     }
 
@@ -230,11 +240,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     public void onMapClick(LatLng latLng) {
         mapManager.onMapClick(latLng);
 
-        // Manuel konum değişikliği için weatherSpeedManager'ı güncelle
         manualLocationChange = true;
         stopSimulatedMovement();
 
-        // weatherSpeedManager'a manuel konum bilgisini gönder
         weatherSpeedManager.updateLocationFromMapSelection(
                 latLng.latitude,
                 latLng.longitude,
@@ -249,7 +257,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private void showLoading(boolean show) {
         loadingPanel.setVisibility(show ? View.VISIBLE : View.GONE);
     }
-
 
     private void updateStatistics(List<KazaData> kazaDataList) {
         int olumluCount = 0;
@@ -268,10 +275,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         tvTotalCount.setText(String.valueOf(olumluCount + yaraliCount));
     }
 
-
-
     private void startSimulatedMovement() {
-        // Eğer manuel konum değişikliği yapıldıysa simülasyonu başlatma
         if (manualLocationChange) {
             Log.d(TAG, "Simulated movement not started - manual location change active");
             return;
@@ -317,17 +321,19 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     @Override
     public void onMyLocationChange(Location location) {
-        if (!manualLocationChange) { // Manuel konum değişikliği değilse güncelle
+        if (!manualLocationChange) {
             updateLocationOnMap(location);
         }
     }
-
 
     @Override
     protected void onPause() {
         super.onPause();
         mapManager.hideWarning();
         handler.removeCallbacks(simulateMovement);
+        if (tts != null) {
+            tts.stop();
+        }
     }
 
     @Override
@@ -335,6 +341,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
         super.onDestroy();
         mapManager.hideWarning();
         handler.removeCallbacks(simulateMovement);
+        if (tts != null) {
+            tts.shutdown();
+        }
     }
 
     private void getLastKnownLocation() {

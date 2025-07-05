@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- res/drawable/background_pattern.xml -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Ana arka plan rengi -->
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/backgroundColor" />
+        </shape>
+    </item>
+
+    <!-- Seyrek logo pattern -->
+    <item>
+        <bitmap
+            android:src="@drawable/app_logo"
+            android:tileMode="repeat"
+            android:alpha="0.5"
+            android:gravity="center_vertical" />
+    </item>
+
+</layer-list>

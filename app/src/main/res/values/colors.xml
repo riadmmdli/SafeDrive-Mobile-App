@@ -1,10 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Ana Renkler -->
-    <color name="primary_color">#1976D2</color>
+
     <color name="primary_dark">#1565C0</color>
     <color name="primary_light">#42A5F5</color>
     <color name="accent_color">#FF5722</color>
+
+    <!-- Primary Colors -->
+    <color name="primaryColor">#2196F3</color>
+    <color name="primaryColorDark">#1976D2</color>
+    <color name="primaryColorLight">#BBDEFB</color>
+
+    <!-- Text Colors -->
+    <color name="primaryText">#212121</color>
+    <color name="secondaryText">#757575</color>
+    <color name="accentText">#2196F3</color>
+    <!-- Background Colors -->
+    <color name="backgroundColor">#FAFAFA</color>
+    <color name="cardBackground">#FFFFFF</color>
+    <color name="surfaceColor">#FFFFFF</color>
+
+    <!-- Accent Colors -->
+    <color name="accentColor">#FF4081</color>
+    <color name="errorColor">#F44336</color>
+    <color name="successColor">#4CAF50</color>
+    <color name="warningColor">#FF9800</color>
+
+    <!-- Divider and Border -->
+    <color name="dividerColor">#E0E0E0</color>
+    <color name="borderColor">#EEEEEE</color>
+
+    <!-- Map Marker Colors -->
+    <color name="markerRed">#FF5722</color>
+    <color name="markerYellow">#FFC107</color>
+    <color name="markerGreen">#4CAF50</color>
+
+    <!-- Dark Theme Colors (optional) -->
+    <color name="backgroundColorDark">#121212</color>
+    <color name="cardBackgroundDark">#1E1E1E</color>
+    <color name="primaryTextDark">#FFFFFF</color>
+    <color name="secondaryTextDark">#B3B3B3</color>
+
 
     <!-- Metin Renkleri -->
     <color name="primary_text">#212121</color>
@@ -38,6 +74,4 @@
 
     <color name="warning_color">#FFFF00</color>
     <color name="critical_warning_color">#FF0000</color>
-
-
 </resources>

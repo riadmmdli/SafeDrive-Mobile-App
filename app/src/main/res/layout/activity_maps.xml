@@ -233,6 +233,32 @@
                 android:background="?android:attr/selectableItemBackgroundBorderless" />
 
         </LinearLayout>
+        <LinearLayout
+            android:id="@+id/allWarningsLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:layout_alignParentTop="true"
+            android:layout_marginTop="120dp"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp">
+
+            <LinearLayout
+                android:id="@+id/weatherWarningLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone"
+                android:layout_marginBottom="8dp" />
+
+            <LinearLayout
+                android:id="@+id/warningLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone" />
+
+        </LinearLayout>
 
     </com.google.android.material.card.MaterialCardView>
 
@@ -276,6 +302,7 @@
             android:textSize="14sp" />
 
     </LinearLayout>
+
 
     <!-- Floating Action Buttons -->
     <!-- Geri Dönüş Butonu -->

@@ -23,7 +23,7 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import java.util.List;
 import java.util.Locale;
 
-public class MapManager {
+public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListener {
     private static final String TAG = "MapManager";
     private static final float PROXIMITY_THRESHOLD_METERS = 100;
     private GoogleMap mMap;
@@ -37,6 +37,12 @@ public class MapManager {
     private WeatherSpeedInfoManager weatherSpeedInfoManager;
 
     private TextToSpeech textToSpeech;
+
+    private LinearLayout weatherWarningLayout;
+    private View currentWeatherWarningView;
+    private String currentWeatherWarningType = null;
+    private long lastWeatherWarningTime = 0;
+    private static final long WEATHER_WARNING_COOLDOWN = 30000; // 30 saniye cooldown
 
     public MapManager(Context context, GoogleMap googleMap, LinearLayout warningLayout) {
         this.context = context;
@@ -62,6 +68,262 @@ public class MapManager {
 
     public void setWeatherSpeedInfoManager(WeatherSpeedInfoManager weatherSpeedInfoManager) {
         this.weatherSpeedInfoManager = weatherSpeedInfoManager;
+        // WeatherSpeedInfoManager'a listener olarak kendimizi kaydet
+        if (weatherSpeedInfoManager != null) {
+            weatherSpeedInfoManager.setWeatherWarningListener(this);
+        }
+    }
+
+    public void setWeatherWarningLayout(LinearLayout weatherWarningLayout) {
+        this.weatherWarningLayout = weatherWarningLayout;
+    }
+
+    // WeatherWarningListener interface implementasyonu
+    @Override
+    public void onSevereWeatherDetected(String weatherDescription) {
+        Log.d(TAG, "Severe weather detected from WeatherSpeedInfoManager: " + weatherDescription);
+
+        // Hava durumuna göre uygun uyarı göster
+        String weatherType = determineWeatherType(weatherDescription);
+        String warningMessage = generateWeatherWarningMessage(weatherDescription, weatherType);
+
+        showWeatherWarning(warningMessage, weatherType);
+    }
+
+    // Hava durumu tipini belirle
+    private String determineWeatherType(String weatherDescription) {
+        if (weatherDescription == null) return "unknown";
+
+        String lower = weatherDescription.toLowerCase();
+
+        if (lower.contains("yağmur") || lower.contains("sağanak") || lower.contains("çisenti") ||
+                lower.contains("rain") || lower.contains("shower")) {
+            return "rain";
+        } else if (lower.contains("kar") || lower.contains("snow")) {
+            return "snow";
+        } else if (lower.contains("fırtına") || lower.contains("gök gürültülü") ||
+                lower.contains("storm") || lower.contains("thunderstorm")) {
+            return "storm";
+        } else if (lower.contains("sis") || lower.contains("pus") || lower.contains("fog") ||
+                lower.contains("mist")) {
+            return "fog";
+        } else if (lower.contains("şiddetli") || lower.contains("yoğun") || lower.contains("heavy")) {
+            return "severe";
+        } else if (lower.contains("rüzgar") || lower.contains("wind")) {
+            return "wind";
+        }
+
+        return "unknown";
+    }
+
+    // Hava durumu uyarı mesajını oluştur
+    private String generateWeatherWarningMessage(String weatherDescription, String weatherType) {
+        switch (weatherType) {
+            case "rain":
+                return "🌧️ YAĞMUR UYARISI: Hava durumu yağmurlu! " +
+                        "Sürüş yaparken dikkatli olun. Fren mesafesi artabilir, " +
+                        "yol kaygan olabilir. Hızınızı düşürün.";
+            case "snow":
+                return "❄️ KAR UYARISI: Hava durumu karlı! " +
+                        "Sürüş yaparken son derece dikkatli olun. Yol buzlu ve kaygan olabilir. " +
+                        "Hızınızı düşürün, ani fren yapmayın.";
+            case "storm":
+                return "⛈️ FIRTINA UYARISI: Hava durumu fırtınalı! " +
+                        "Sürüş yaparken çok dikkatli olun. Görüş mesafesi azalabilir, " +
+                        "rüzgar etkisiyle araç kontrolü zorlaşabilir.";
+            case "fog":
+                return "🌫️ SIS UYARISI: Hava durumu sisli! " +
+                        "Görüş mesafesi azalmış. Farları yakın, hızınızı düşürün, " +
+                        "araç takip mesafenizi artırın.";
+            case "severe":
+                return "⚠️ ŞİDDETLİ HAVA UYARISI: Hava durumu çok kötü! " +
+                        "Sürüş yaparken son derece dikkatli olun. Mümkünse seyahatinizi erteleyiniz.";
+            case "wind":
+                return "💨 RÜZGAR UYARISI: Hava durumu rüzgarlı! " +
+                        "Araç kontrolünde dikkatli olun. Yan rüzgar etkisiyle sürüş zorlaşabilir.";
+            default:
+                return "⚠️ HAVA DURUMU UYARISI: Hava durumu sürüş için uygun değil! " +
+                        "Sürüş yaparken dikkatli olun. (" + weatherDescription + ")";
+        }
+    }
+
+    public void showWeatherWarning(String message, String weatherType) {
+        if (weatherWarningLayout == null || mapsActivity == null) {
+            Log.e(TAG, "weatherWarningLayout or mapsActivity is null!");
+            return;
+        }
+
+        // Cooldown kontrolü - aynı tip uyarının çok sık gösterilmesini engelle
+        long currentTime = System.currentTimeMillis();
+        if (weatherType.equals(currentWeatherWarningType) &&
+                (currentTime - lastWeatherWarningTime) < WEATHER_WARNING_COOLDOWN) {
+            Log.d(TAG, "Weather warning cooldown active, skipping: " + weatherType);
+            return;
+        }
+
+        mapsActivity.runOnUiThread(() -> {
+            try {
+                // Önceki hava durumu uyarısını kaldır
+                hideWeatherWarning();
+
+                LayoutInflater inflater = LayoutInflater.from(context);
+                View weatherWarningView = inflater.inflate(R.layout.weather_warning_layout, weatherWarningLayout, false);
+
+                TextView warningTextView = weatherWarningView.findViewById(R.id.weatherWarningTextView);
+                ImageView closeWarning = weatherWarningView.findViewById(R.id.closeWeatherWarning);
+                ImageView weatherIcon = weatherWarningView.findViewById(R.id.weatherWarningIcon);
+
+                // Hava durumu tipine göre renk ve ikon ayarla
+                int warningColor = getWeatherWarningColor(weatherType);
+                int iconResource = getWeatherWarningIcon(weatherType);
+
+                weatherWarningView.setBackgroundColor(ContextCompat.getColor(context, warningColor));
+                weatherIcon.setImageResource(iconResource);
+                warningTextView.setText(message);
+
+                closeWarning.setOnClickListener(v -> hideWeatherWarning());
+
+                weatherWarningLayout.addView(weatherWarningView);
+                weatherWarningLayout.setVisibility(View.VISIBLE);
+
+                currentWeatherWarningView = weatherWarningView;
+                currentWeatherWarningType = weatherType;
+                lastWeatherWarningTime = currentTime;
+
+                Log.d(TAG, "WEATHER WARNING DISPLAYED: " + message);
+
+                // Toast mesajı
+                String toastMessage = "Hava Durumu Uyarısı: " + getWeatherTypeText(weatherType);
+                Toast.makeText(context, toastMessage, Toast.LENGTH_LONG).show();
+
+                // Sesli uyarı
+                speakWeatherWarning(message, weatherType);
+
+            } catch (Exception e) {
+                Log.e(TAG, "Error showing weather warning: " + e.getMessage(), e);
+            }
+        });
+    }
+
+    public void hideWeatherWarning() {
+        if (weatherWarningLayout != null && currentWeatherWarningView != null) {
+            weatherWarningLayout.removeView(currentWeatherWarningView);
+            if (weatherWarningLayout.getChildCount() == 0) {
+                weatherWarningLayout.setVisibility(View.GONE);
+            }
+            currentWeatherWarningView = null;
+            currentWeatherWarningType = null;
+        }
+    }
+
+    private int getWeatherWarningColor(String weatherType) {
+        switch (weatherType.toLowerCase()) {
+            case "rain":
+                return android.R.color.holo_blue_light;
+            case "snow":
+                return android.R.color.holo_blue_bright;
+            case "storm":
+                return android.R.color.holo_purple;
+            case "fog":
+                return android.R.color.darker_gray;
+            case "severe":
+                return android.R.color.holo_red_dark;
+            case "wind":
+                return android.R.color.holo_orange_dark;
+            default:
+                return android.R.color.holo_orange_light;
+        }
+    }
+
+    private int getWeatherWarningIcon(String weatherType) {
+        switch (weatherType.toLowerCase()) {
+            case "rain":
+                return R.drawable.ic_rainy;
+            case "snow":
+                return R.drawable.ic_snowy;
+            case "storm":
+                return R.drawable.ic_windy;
+            case "fog":
+                return R.drawable.ic_foggy;
+            case "severe":
+                return R.drawable.ic_weather_severe;
+            case "wind":
+                return R.drawable.ic_windy;
+            default:
+                return R.drawable.ic_weather_unknown;
+        }
+    }
+
+    private String getWeatherTypeText(String weatherType) {
+        switch (weatherType.toLowerCase()) {
+            case "rain":
+                return "Yağmur";
+            case "snow":
+                return "Kar";
+            case "storm":
+                return "Fırtına";
+            case "fog":
+                return "Sis";
+            case "severe":
+                return "Şiddetli Hava";
+            case "wind":
+                return "Rüzgar";
+            default:
+                return "Kötü Hava";
+        }
+    }
+
+    private void speakWeatherWarning(String message, String weatherType) {
+        if (textToSpeech == null) return;
+
+        String speechText = generateSpeechText(weatherType);
+
+        textToSpeech.stop(); // Önceki konuşmayı durdur
+        textToSpeech.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "WEATHER_WARNING_ID");
+    }
+
+    private String generateSpeechText(String weatherType) {
+        switch (weatherType.toLowerCase()) {
+            case "rain":
+                return "Dikkat! Hava durumu yağmurlu. Sürüş yaparken dikkatli olun. Hızınızı düşürün.";
+            case "snow":
+                return "Dikkat! Hava durumu karlı. Yol buzlu ve kaygan olabilir. Çok dikkatli sürün.";
+            case "storm":
+                return "Dikkat! Hava durumu fırtınalı. Görüş mesafesi azalabilir. Dikkatli sürün.";
+            case "fog":
+                return "Dikkat! Hava durumu sisli. Görüş mesafesi azalmış. Farları yakın, hızınızı düşürün.";
+            case "severe":
+                return "Dikkat! Hava durumu çok kötü. Sürüş yaparken son derece dikkatli olun.";
+            case "wind":
+                return "Dikkat! Hava durumu rüzgarlı. Araç kontrolünde dikkatli olun.";
+            default:
+                return "Dikkat! Hava durumu kötü. Sürüş yaparken dikkatli olun.";
+        }
+    }
+
+    // Belirli hava durumu tiplerini kontrol et
+    public boolean isCurrentWeatherSevere() {
+        return currentWeatherWarningType != null &&
+                (currentWeatherWarningType.equals("severe") ||
+                        currentWeatherWarningType.equals("storm") ||
+                        currentWeatherWarningType.equals("snow"));
+    }
+
+    // Mevcut hava durumu uyarı tipini al
+    public String getCurrentWeatherWarningType() {
+        return currentWeatherWarningType;
+    }
+
+    // Hava durumu uyarısını manuel olarak temizle
+    public void clearWeatherWarning() {
+        hideWeatherWarning();
+        Log.d(TAG, "Weather warning manually cleared");
+    }
+
+    // Hava durumu uyarısı cooldown süresini sıfırla
+    public void resetWeatherWarningCooldown() {
+        lastWeatherWarningTime = 0;
+        Log.d(TAG, "Weather warning cooldown reset");
     }
 
     public void addKazaMarker(KazaData kazaData) {
@@ -288,6 +550,8 @@ public class MapManager {
             textToSpeech.shutdown();
             textToSpeech = null;
         }
+        // Hava durumu uyarısını da gizle
+        hideWeatherWarning();
     }
 
     public void checkProximityToAccidents() {

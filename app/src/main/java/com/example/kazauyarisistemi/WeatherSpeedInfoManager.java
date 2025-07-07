@@ -1,13 +1,20 @@
 package com.example.kazauyarisistemi;
 
+import android.app.AlertDialog;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.Context;
+import android.content.Intent;
 import android.location.Location;
+import android.os.Build;
 import android.util.Log;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
 import com.android.volley.Request;
@@ -26,10 +33,16 @@ import java.util.Locale;
 
 public class WeatherSpeedInfoManager {
     private static final String TAG = "WeatherSpeedInfoManager";
-    private static final double PROXIMITY_THRESHOLD_KM = 0.1; // 100 metre yakınlık
+    private static final double PROXIMITY_THRESHOLD_KM = 0.1;
     private static final String OPENWEATHERMAP_API_KEY = "c2754d862006a4017a037e2c8f03ef7d";
-    private static final long MIN_UPDATE_INTERVAL = 10000; // 10 saniye minimum güncelleme aralığı (düşürüldü)
-    private static final double MIN_DISTANCE_FOR_UPDATE = 0.5; // 500 metre minimum mesafe (düşürüldü)
+    private static final long MIN_UPDATE_INTERVAL = 10000;
+    private static final double MIN_DISTANCE_FOR_UPDATE = 0.5;
+
+    // Bildirim için sabitler
+    private static final String CHANNEL_ID = "WEATHER_ALERT_CHANNEL";
+    private static final String CHANNEL_NAME = "Hava Durumu Uyarıları";
+    private static final String CHANNEL_DESCRIPTION = "Ekstrem hava durumu uyarıları";
+    private static final int NOTIFICATION_ID = 1001;
 
     private Context context;
     private ImageView weatherIcon;
@@ -41,15 +54,21 @@ public class WeatherSpeedInfoManager {
     private Location currentLocation;
     private RequestQueue requestQueue;
     private String currentWeatherDescription = "Bilinmiyor";
+    private NotificationManager notificationManager;
 
     // Cache için değişkenler
     private double lastWeatherLat = Double.NaN;
     private double lastWeatherLon = Double.NaN;
     private long lastWeatherUpdateTime = 0;
     private boolean isWeatherUpdateInProgress = false;
-
-    // Manuel konum takibi için yeni değişken
     private boolean isManualLocation = false;
+
+    // Son bildirim zamanını takip etmek için
+    private long lastNotificationTime = 0;
+    private static final long NOTIFICATION_COOLDOWN = 300000; // 5 dakika
+
+    private MapManager mapManager;
+    private WeatherWarningListener weatherWarningListener;
 
     public WeatherSpeedInfoManager(Context context, View infoPanel,
                                    ImageView weatherIcon, TextView weatherText,
@@ -61,18 +80,185 @@ public class WeatherSpeedInfoManager {
         this.speedIcon = speedIcon;
         this.speedText = speedText;
         this.requestQueue = Volley.newRequestQueue(context);
+        this.notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+
+        // Bildirim kanalını oluştur
+        createNotificationChannel();
 
         // Başlangıç durumu
         updateWeatherInfo("Bilinmiyor");
         updateSpeedInfo(null);
     }
 
+    // Bildirim kanalını oluştur
+    private void createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID,
+                    CHANNEL_NAME,
+                    NotificationManager.IMPORTANCE_HIGH
+            );
+            channel.setDescription(CHANNEL_DESCRIPTION);
+            channel.enableLights(true);
+            channel.enableVibration(true);
+            channel.setLightColor(android.graphics.Color.RED);
+            notificationManager.createNotificationChannel(channel);
+        }
+    }
+
+    // Ekstrem hava durumu kontrolü ve bildirim gönderme
+    private void checkAndNotifyExtremeWeather(String weatherDescription) {
+        if (weatherDescription == null || weatherDescription.equals("Bilinmiyor")) {
+            return;
+        }
+
+        // Bildirim cooldown kontrolü
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastNotificationTime < NOTIFICATION_COOLDOWN) {
+            Log.d(TAG, "Notification cooldown active, skipping notification");
+            return;
+        }
+
+        String extremeWeatherType = getExtremeWeatherType(weatherDescription);
+        if (extremeWeatherType != null) {
+            sendWeatherNotification(extremeWeatherType, weatherDescription);
+            lastNotificationTime = currentTime;
+        }
+    }
+
+    // Ekstrem hava durumu tipini belirle
+    private String getExtremeWeatherType(String description) {
+        if (description == null) return null;
+
+        String lower = description.toLowerCase();
+
+        // Şiddetli fırtına
+        if (lower.contains("şiddetli fırtına") || lower.contains("gök gürültülü fırtına") ||
+                lower.contains("thunderstorm")) {
+            return "FIRTINA";
+        }
+        // Yoğun kar
+        else if (lower.contains("yoğun kar") || lower.contains("şiddetli kar") ||
+                lower.contains("heavy snow")) {
+            return "YOGUN_KAR";
+        }
+        // Şiddetli yağmur
+        else if (lower.contains("şiddetli yağmur") || lower.contains("heavy rain") ||
+                lower.contains("sağanak")) {
+            return "SIDDETLI_YAGMUR";
+        }
+        // Yoğun sis
+        else if (lower.contains("yoğun sis") || lower.contains("dense fog")) {
+            return "YOGUN_SIS";
+        }
+        // Kum fırtınası
+        else if (lower.contains("kum fırtınası") || lower.contains("dust storm") ||
+                lower.contains("sand storm")) {
+            return "KUM_FIRTINASI";
+        }
+        // Hafif ekstrem durumlar
+        else if (lower.contains("yağmur") || lower.contains("kar") || lower.contains("sis") ||
+                lower.contains("fırtına")) {
+            return "HAFIF_EKSTREM";
+        }
+
+        return null;
+    }
+
+    // Hava durumu bildirimi gönder
+    private void sendWeatherNotification(String weatherType, String weatherDescription) {
+        String title = "";
+        String message = "";
+        int iconResource = R.drawable.ic_weather_unknown;
+        int priority = NotificationCompat.PRIORITY_DEFAULT;
+
+        switch (weatherType) {
+            case "FIRTINA":
+                title = "⚠️ ŞİDDETLİ FIRTINA UYARISI";
+                message = "Hava durumu: " + weatherDescription +
+                        "\nDışarı çıkmayın! Sürüş yapmayın! Güvenli bir yerde kalın.";
+                iconResource = R.drawable.ic_windy;
+                priority = NotificationCompat.PRIORITY_MAX;
+                break;
+
+            case "YOGUN_KAR":
+                title = "❄️ YOĞUN KAR UYARISI";
+                message = "Hava durumu: " + weatherDescription +
+                        "\nYollar buzlu ve tehlikeli! Sürüş yapmaktan kaçının.";
+                iconResource = R.drawable.ic_snowy;
+                priority = NotificationCompat.PRIORITY_HIGH;
+                break;
+
+            case "SIDDETLI_YAGMUR":
+                title = "🌧️ ŞİDDETLİ YAĞMUR UYARISI";
+                message = "Hava durumu: " + weatherDescription +
+                        "\nSel riski var! Hızınızı düşürün, dikkatli sürün.";
+                iconResource = R.drawable.ic_rainy;
+                priority = NotificationCompat.PRIORITY_HIGH;
+                break;
+
+            case "YOGUN_SIS":
+                title = "🌫️ YOĞUN SIS UYARISI";
+                message = "Hava durumu: " + weatherDescription +
+                        "\nGörüş mesafesi çok düşük! Farları yakın, yavaş sürün.";
+                iconResource = R.drawable.ic_foggy;
+                priority = NotificationCompat.PRIORITY_HIGH;
+                break;
+
+            case "KUM_FIRTINASI":
+                title = "🌪️ KUM FIRTINASI UYARISI";
+                message = "Hava durumu: " + weatherDescription +
+                        "\nSoluk almakta zorluk çekebilirsiniz! İç mekanda kalın.";
+                iconResource = R.drawable.ic_windy;
+                priority = NotificationCompat.PRIORITY_MAX;
+                break;
+
+            case "HAFIF_EKSTREM":
+                title = "⚠️ HAVA DURUMU UYARISI";
+                message = "Hava durumu: " + weatherDescription +
+                        "\nSürüş yaparken dikkatli olun.";
+                iconResource = getWeatherIcon(weatherDescription);
+                priority = NotificationCompat.PRIORITY_DEFAULT;
+                break;
+        }
+
+        // Bildirim oluştur
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(iconResource)
+                .setContentTitle(title)
+                .setContentText(message)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(message))
+                .setPriority(priority)
+                .setAutoCancel(true)
+                .setDefaults(NotificationCompat.DEFAULT_ALL);
+
+        // Ana aktiviteyi açmak için intent
+        Intent intent = new Intent(context, context.getClass());
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+
+        PendingIntent pendingIntent = PendingIntent.getActivity(
+                context, 0, intent,
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ?
+                        PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE :
+                        PendingIntent.FLAG_UPDATE_CURRENT
+        );
+
+        builder.setContentIntent(pendingIntent);
+
+        // Bildirimi gönder
+        notificationManager.notify(NOTIFICATION_ID, builder.build());
+
+        Log.d(TAG, "Extreme weather notification sent: " + title);
+        // Ayrıca yazılı AlertDialog göster
+        showExtremeWeatherAlert(weatherDescription);
+
+    }
+
     // Harita üzerinde seçilen konum için özel method
     public void updateLocationFromMapSelection(double latitude, double longitude, List<KazaData> kazaDataList) {
         this.kazaDataList = kazaDataList;
-        this.isManualLocation = true; // Manuel konum olduğunu işaretle
+        this.isManualLocation = true;
 
-        // Yeni konum oluştur
         Location newLocation = new Location("map_selection");
         newLocation.setLatitude(latitude);
         newLocation.setLongitude(longitude);
@@ -82,22 +268,24 @@ public class WeatherSpeedInfoManager {
         Log.d(TAG, "Selected coordinates: " + latitude + ", " + longitude);
         Log.d(TAG, "Manual location flag set to: " + isManualLocation);
 
-        // Harita seçiminde her zaman hava durumunu güncelle
         forceWeatherUpdate();
         updateSpeedInfoBasedOnLocation();
+    }
+
+    public void setMapManager(MapManager mapManager) {
+        this.mapManager = mapManager;
     }
 
     public void updateLocation(Location location, List<KazaData> kazaDataList) {
         this.currentLocation = location;
         this.kazaDataList = kazaDataList;
-        this.isManualLocation = false; // GPS konumu olduğunu işaretle
+        this.isManualLocation = false;
 
         if (location != null) {
             Log.d(TAG, "=== GPS LOCATION UPDATE ===");
             Log.d(TAG, "New coordinates: " + location.getLatitude() + ", " + location.getLongitude());
             Log.d(TAG, "Manual location flag set to: " + isManualLocation);
 
-            // GPS lokasyonu için normal cache kontrolü
             boolean shouldUpdateWeather = shouldUpdateWeather(location);
             Log.d(TAG, "Should update weather: " + shouldUpdateWeather);
 
@@ -111,8 +299,24 @@ public class WeatherSpeedInfoManager {
         }
     }
 
+    public void setWeatherWarningListener(WeatherWarningListener listener) {
+        this.weatherWarningListener = listener;
+    }
+
+    public interface WeatherWarningListener {
+        void onSevereWeatherDetected(String weatherDescription);
+    }
+
+    private boolean isSevereWeather(String description) {
+        if (description == null) return false;
+        String lower = description.toLowerCase();
+        return lower.contains("yağmur") || lower.contains("kar") || lower.contains("sis") ||
+                lower.contains("fırtına") || lower.contains("sağanak") || lower.contains("çisenti") ||
+                lower.contains("rain") || lower.contains("snow") || lower.contains("fog") ||
+                lower.contains("storm") || lower.contains("thunderstorm");
+    }
+
     private boolean shouldUpdateWeather(Location location) {
-        // Eğer weather update devam ediyorsa bekleme
         if (isWeatherUpdateInProgress) {
             Log.d(TAG, "Weather update already in progress, skipping");
             return false;
@@ -122,20 +326,17 @@ public class WeatherSpeedInfoManager {
         double lat = location.getLatitude();
         double lon = location.getLongitude();
 
-        // İlk çağrı ise güncelle
         if (Double.isNaN(lastWeatherLat) || Double.isNaN(lastWeatherLon)) {
             Log.d(TAG, "First weather update");
             return true;
         }
 
-        // Minimum güncelleme aralığı kontrolü
         if (currentTime - lastWeatherUpdateTime < MIN_UPDATE_INTERVAL) {
             Log.d(TAG, "Too soon for weather update. Last update: " +
                     (currentTime - lastWeatherUpdateTime) + "ms ago");
             return false;
         }
 
-        // Konum farkı kontrolü (minimum mesafe değişikliği)
         double distance = calculateDistance(lastWeatherLat, lastWeatherLon, lat, lon);
         Log.d(TAG, "Distance from last weather location: " + distance + "km");
 
@@ -143,7 +344,6 @@ public class WeatherSpeedInfoManager {
             return true;
         }
 
-        // Eğer hava durumu hala "Bilinmiyor" ise tekrar dene
         if (currentWeatherDescription.equals("Bilinmiyor") ||
                 currentWeatherDescription.contains("Hata") ||
                 currentWeatherDescription.contains("API")) {
@@ -193,8 +393,7 @@ public class WeatherSpeedInfoManager {
     }
 
     private Integer simulateSpeedLimitForLocation() {
-        // Veri setinde bulunmayan konumlar için "Bilinmiyor" döndür
-        return null; // Bu null değeri "Bilinmiyor" olarak gösterilecek
+        return null;
     }
 
     private double calculateDistance(double lat1, double lon1, double lat2, double lon2) {
@@ -209,21 +408,15 @@ public class WeatherSpeedInfoManager {
     }
 
     private void getWeatherData(double latitude, double longitude) {
-        // Eğer zaten bir weather update devam ediyorsa iptal et
         if (isWeatherUpdateInProgress) {
             Log.d(TAG, "Weather update already in progress, ignoring new request");
             return;
         }
 
         isWeatherUpdateInProgress = true;
-
-        // Loading durumunu göster
         updateWeatherInfo("Yükleniyor...");
 
-        // Timestamp ekle
         long timestamp = System.currentTimeMillis();
-
-        // API URL'sini koordinatlar ile oluştur
         String url = String.format(Locale.US,
                 "https://api.openweathermap.org/data/2.5/weather?lat=%.6f&lon=%.6f&appid=%s&units=metric&lang=tr&_=%d",
                 latitude, longitude, OPENWEATHERMAP_API_KEY, timestamp);
@@ -240,30 +433,23 @@ public class WeatherSpeedInfoManager {
                     Log.d(TAG, "Full response: " + response.toString());
 
                     try {
-                        // Koordinat bilgilerini logla
                         if (response.has("coord")) {
                             JSONObject coord = response.getJSONObject("coord");
                             double responseLat = coord.getDouble("lat");
                             double responseLon = coord.getDouble("lon");
                             Log.d(TAG, "API Response Coordinates: " + responseLat + ", " + responseLon);
 
-                            // Cache değerlerini güncelle
                             lastWeatherLat = responseLat;
                             lastWeatherLon = responseLon;
                             lastWeatherUpdateTime = System.currentTimeMillis();
                         }
 
-                        // Hava durumu bilgisini al
                         JSONArray weatherArray = response.getJSONArray("weather");
                         JSONObject weatherObject = weatherArray.getJSONObject(0);
                         String weatherDescription = weatherObject.getString("description");
                         String weatherMain = weatherObject.getString("main");
-                        String weatherId = weatherObject.getString("id");
 
-                        // Şehir bilgisini al
                         String cityName = response.optString("name", "Bilinmiyor");
-
-                        // Sıcaklık bilgisini al
                         double temperature = response.getJSONObject("main").getDouble("temp");
 
                         Log.d(TAG, "Weather data received:");
@@ -272,7 +458,6 @@ public class WeatherSpeedInfoManager {
                         Log.d(TAG, "  Description: " + weatherDescription);
                         Log.d(TAG, "  Temperature: " + temperature);
 
-                        // Türkçe çeviri ile güncelle
                         String translatedWeather = translateWeatherToTurkish(weatherMain, weatherDescription);
                         String weatherWithTemp = translatedWeather + " (" + Math.round(temperature) + "°C)";
                         currentWeatherDescription = weatherWithTemp;
@@ -280,7 +465,20 @@ public class WeatherSpeedInfoManager {
                         Log.d(TAG, "Translated weather: " + weatherWithTemp);
                         updateWeatherInfo(weatherWithTemp);
 
-                        // Manuel konum mu GPS konum mu olduğuna göre farklı mesaj
+                        // EKSTREM HAVA DURUMU BİLDİRİMİ KONTROLÜ
+                        checkAndNotifyExtremeWeather(weatherWithTemp);
+
+                        if (isSevereWeather(translatedWeather)) {
+                            Log.d(TAG, "Severe weather detected: " + translatedWeather);
+                            checkWeatherWarning(translatedWeather);
+
+                            if (weatherWarningListener != null) {
+                                weatherWarningListener.onSevereWeatherDetected(translatedWeather);
+                            }
+                        } else {
+                            clearWeatherWarning();
+                        }
+
                         String locationSource = isManualLocation ? "Manuel konum" : "GPS konum";
                         Toast.makeText(context, locationSource + " - Hava durumu güncellendi: " + weatherWithTemp +
                                 " - " + cityName, Toast.LENGTH_SHORT).show();
@@ -323,11 +521,8 @@ public class WeatherSpeedInfoManager {
                             Toast.LENGTH_LONG).show();
                 });
 
-        // Request timeout ayarları
         request.setRetryPolicy(new com.android.volley.DefaultRetryPolicy(
-                10000, // 10 saniye timeout
-                1, // 1 retry
-                1.0f // backoff multiplier
+                10000, 1, 1.0f
         ));
 
         requestQueue.add(request);
@@ -335,7 +530,6 @@ public class WeatherSpeedInfoManager {
     }
 
     private String translateWeatherToTurkish(String main, String description) {
-        // Ana hava durumu kategorilerine göre Türkçe çeviri
         switch (main.toLowerCase()) {
             case "clear":
                 return "Açık";
@@ -369,21 +563,112 @@ public class WeatherSpeedInfoManager {
             case "smoke":
                 return "Dumanlı";
             default:
-                // API'den gelen Türkçe açıklama varsa onu kullan
                 return description.substring(0, 1).toUpperCase() + description.substring(1);
         }
     }
 
-    private void updateWeatherInfo(String weather) {
-        int weatherIconRes = getWeatherIcon(weather);
-        weatherIcon.setImageResource(weatherIconRes);
+    private void updateWeatherInfo(String weatherInfo) {
+        if (weatherText != null) {
+            weatherText.setText(weatherInfo);
+        }
 
-        weatherText.setText(weather);
+        if (weatherIcon != null) {
+            int iconResource = getWeatherIcon(weatherInfo);
+            weatherIcon.setImageResource(iconResource);
 
-        int weatherColor = getWeatherColor(weather);
-        weatherIcon.setColorFilter(ContextCompat.getColor(context, weatherColor));
+            int weatherColor = getWeatherColor(weatherInfo);
+            weatherIcon.setColorFilter(ContextCompat.getColor(context, weatherColor));
+        }
 
-        Log.d(TAG, "UI updated with weather: " + weather);
+        Log.d(TAG, "Weather info updated: " + weatherInfo);
+
+        // 🌩️ Ekstrem hava durumu tespiti ve AlertDialog gösterimi
+        if (isExtremeWeather(weatherInfo)) {
+            showExtremeWeatherAlert(weatherInfo);
+        }
+    }
+
+    private boolean isExtremeWeather(String description) {
+        if (description == null) return false;
+        String lower = description.toLowerCase();
+        return lower.contains("fırtına") || lower.contains("yoğun kar") ||
+                lower.contains("şiddetli yağmur") || lower.contains("yoğun sis") ||
+                lower.contains("kum fırtınası") || lower.contains("storm") ||
+                lower.contains("heavy snow") || lower.contains("heavy rain") ||
+                lower.contains("dense fog") || lower.contains("dust storm");
+    }
+
+    private void showExtremeWeatherAlert(String weatherDescription) {
+        new AlertDialog.Builder(context)
+                .setTitle("⚠️ Ekstrem Hava Koşulları")
+                .setMessage("Tehlikeli hava durumu tespit edildi: " + weatherDescription +
+                        "\n\nLütfen dikkatli olun ve güvenliğinizi sağlayın.")
+                .setIcon(R.drawable.ic_warning) // Eğer uyarı ikonu varsa
+                .setCancelable(true)
+                .setPositiveButton("Tamam", null)
+                .show();
+
+        Log.d(TAG, "AlertDialog gösterildi (bildirimle birlikte): " + weatherDescription);
+    }
+
+
+
+    private void checkWeatherWarning(String weather) {
+        if (mapManager == null) return;
+
+        String lowerWeather = weather.toLowerCase();
+
+        if (lowerWeather.contains("yağmur") || lowerWeather.contains("sağanak") ||
+                lowerWeather.contains("çisenti") || lowerWeather.contains("rain")) {
+
+            String warningMessage = "🌧️ YAĞMUR UYARISI: Hava durumu yağmurlu! " +
+                    "Sürüş yaparken dikkatli olun. Fren mesafesi artabilir, " +
+                    "yol kaygan olabilir. Hızınızı düşürün.";
+
+            mapManager.showWeatherWarning(warningMessage, "rain");
+            Log.d(TAG, "Rain warning triggered: " + weather);
+        }
+        else if (lowerWeather.contains("kar") || lowerWeather.contains("snow")) {
+
+            String warningMessage = "❄️ KAR UYARISI: Hava durumu karlı! " +
+                    "Sürüş yaparken son derece dikkatli olun. Yol buzlu ve kaygan olabilir. " +
+                    "Hızınızı düşürün, ani fren yapmayın.";
+
+            mapManager.showWeatherWarning(warningMessage, "snow");
+            Log.d(TAG, "Snow warning triggered: " + weather);
+        }
+        else if (lowerWeather.contains("fırtına") || lowerWeather.contains("thunderstorm") ||
+                lowerWeather.contains("gök gürültülü")) {
+
+            String warningMessage = "⛈️ FIRTINA UYARISI: Hava durumu fırtınalı! " +
+                    "Sürüş yaperken çok dikkatli olun. Görüş mesafesi azalabilir, " +
+                    "rüzgar etkisiyle araç kontrolü zorlaşabilir.";
+
+            mapManager.showWeatherWarning(warningMessage, "storm");
+            Log.d(TAG, "Storm warning triggered: " + weather);
+        }
+        else if (lowerWeather.contains("sis") || lowerWeather.contains("pus") ||
+                lowerWeather.contains("fog") || lowerWeather.contains("mist")) {
+
+            String warningMessage = "🌫️ SIS UYARISI: Hava durumu sisli! " +
+                    "Görüş mesafesi azalmış. Farları yakın, hızınızı düşürün, " +
+                    "araç takip mesafenizi artırın.";
+
+            mapManager.showWeatherWarning(warningMessage, "fog");
+            Log.d(TAG, "Fog warning triggered: " + weather);
+        }
+        else if (lowerWeather.contains("şiddetli") || lowerWeather.contains("yoğun")) {
+            String warningMessage = "⚠️ ŞİDDETLİ HAVA UYARISI: Hava durumu çok kötü! " +
+                    "Sürüş yaparken son derece dikkatli olun. Mümkünse seyahatinizi erteleyiniz.";
+            mapManager.showWeatherWarning(warningMessage, "severe");
+            Log.d(TAG, "Severe weather warning triggered: " + weather);
+        }
+    }
+
+    public void clearWeatherWarning() {
+        if (mapManager != null) {
+            mapManager.hideWeatherWarning();
+        }
     }
 
     private void updateSpeedInfo(Integer speedLimit) {
@@ -484,7 +769,6 @@ public class WeatherSpeedInfoManager {
             infoText.append("🏢 İlçe: ").append(nearestKaza.ilce).append("\n");
             infoText.append("🏘️ Mahalle: ").append(nearestKaza.mahalle).append("\n");
             infoText.append("🛣️ Yol: ").append(nearestKaza.yol != null ? nearestKaza.yol : "Bilinmiyor").append("\n");
-
             infoText.append("🌩️ Kaza Anı Hava Durumu: ").append(nearestKaza.havaDurumu).append("\n");
             infoText.append("⚠️ Kaza Türü: ").append(nearestKaza.kazaTuru.equals("olumlu") ? "Ölümlü" : "Yaralı").append("\n");
         } else {
@@ -528,6 +812,7 @@ public class WeatherSpeedInfoManager {
     public boolean isManualLocation() {
         return isManualLocation;
     }
+
     private Integer getSpeedLimitForCurrentRoad() {
         if (currentLocation == null || kazaDataList == null) return null;
 

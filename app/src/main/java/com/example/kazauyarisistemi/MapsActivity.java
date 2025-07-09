@@ -14,6 +14,7 @@ import android.os.Looper;
 import android.speech.tts.TextToSpeech;
 import android.util.Log;
 import android.view.View;
+import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
@@ -68,6 +69,10 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private boolean isLocationUpdateInProgress = false;
     private boolean ttsReady = false;
 
+    private int simulatedSpeed = 0;
+    private TextView tvCurrentSpeed;
+    private Button btnIncreaseSpeed, btnDecreaseSpeed;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -113,6 +118,21 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             weatherText = findViewById(R.id.weatherText);
             speedIcon = findViewById(R.id.speedIcon);
             speedText = findViewById(R.id.speedText);
+            tvCurrentSpeed = findViewById(R.id.tvCurrentSpeed);
+            btnIncreaseSpeed = findViewById(R.id.btnIncreaseSpeed);
+            btnDecreaseSpeed = findViewById(R.id.btnDecreaseSpeed);
+
+            updateSpeedDisplay();
+
+            btnIncreaseSpeed.setOnClickListener(v -> {
+                simulatedSpeed += 10;
+                updateSpeedDisplay();
+            });
+
+            btnDecreaseSpeed.setOnClickListener(v -> {
+                simulatedSpeed = Math.max(0, simulatedSpeed - 10);
+                updateSpeedDisplay();
+            });
 
             validateCriticalViews();
         } catch (Exception e) {
@@ -120,6 +140,11 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             throw new RuntimeException("Kritik view'lar yüklenemedi", e);
         }
     }
+
+    private void updateSpeedDisplay() {
+        tvCurrentSpeed.setText("Speed: " + simulatedSpeed + " km/h");
+    }
+
 
     private void validateCriticalViews() {
         if (loadingPanel == null) {

@@ -53,6 +53,8 @@
 
         </LinearLayout>
 
+
+
         <!-- Yaralı Kaza Sayısı -->
         <LinearLayout
             android:layout_width="0dp"
@@ -303,47 +305,82 @@
 
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/speedControlLayout"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_centerHorizontal="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginBottom="80dp"
+        android:orientation="horizontal"
+        android:gravity="center"
+        android:padding="16dp"
+        android:background="#AAFFFFFF">
+
+        <Button
+            android:id="@+id/btnDecreaseSpeed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="-10" />
+
+        <TextView
+            android:id="@+id/tvCurrentSpeed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Speed: 0 km/h"
+            android:textSize="18sp"
+            android:padding="24dp"
+            android:textColor="@android:color/black" />
+
+        <Button
+            android:id="@+id/btnIncreaseSpeed"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="+10" />
+    </LinearLayout>
+
 
     <!-- Floating Action Buttons -->
     <!-- Geri Dönüş Butonu -->
+
+    <!-- Konumum Butonu -->
+
+
+    <!-- Info Toggle Butonu -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabBack"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentStart="true"
         android:layout_alignParentBottom="true"
-        android:layout_marginStart="16dp"
-        android:layout_marginBottom="16dp"
+        android:layout_marginStart="22dp"
+        android:layout_marginBottom="15dp"
         android:src="@android:drawable/ic_menu_revert"
-        app:tint="@android:color/white"
-        app:backgroundTint="#2196F3" />
+        app:backgroundTint="#2196F3"
+        app:tint="@android:color/white" />
 
-    <!-- Konumum Butonu -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabMyLocation"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="200dp"
+        android:layout_marginEnd="11dp"
+        android:layout_marginBottom="271dp"
         android:src="@android:drawable/ic_menu_mylocation"
-        app:tint="@android:color/white"
-        app:backgroundTint="#4CAF50" />
+        app:backgroundTint="#4CAF50"
+        app:tint="@android:color/white" />
 
-
-
-    <!-- Info Toggle Butonu -->
     <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/fabToggleInfo"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_alignParentEnd="true"
         android:layout_alignParentBottom="true"
-        android:layout_marginEnd="16dp"
-        android:layout_marginBottom="130dp"
+        android:layout_marginEnd="11dp"
+        android:layout_marginBottom="196dp"
         android:src="@android:drawable/ic_dialog_info"
-        app:tint="@android:color/white"
-        app:backgroundTint="#9C27B0" />
+        app:backgroundTint="#9C27B0"
+        app:tint="@android:color/white" />
 
 </RelativeLayout>

@@ -803,13 +803,6 @@ public class WeatherSpeedInfoManager {
                                                      String currentWeatherDescription, String accidentWeather) {
         double risk = 0.0;
 
-        // Hız farkı
-        if (speedLimit != null && speedLimit > 0) {
-            double speedDiffRatio = Math.abs(currentSpeed - speedLimit) / (double) speedLimit;
-            double speedScore = Math.max(0, 1.0 - speedDiffRatio); // ne kadar yakınsa, risk o kadar yüksek
-            risk += 0.4 * speedScore;
-        }
-
         // Hava durumu benzerliği
         String currentType = MapManager.determineWeatherType(currentWeatherDescription);
         String accidentType = MapManager.determineWeatherType(accidentWeather);
@@ -819,18 +812,34 @@ public class WeatherSpeedInfoManager {
         }
 
         // Ekstrem hava durumu varsa riski artır
-        if (currentType.equals("storm") || currentType.equals("fog") || currentType.equals("severe") || currentType.equals("snow")) {
+        if (currentType.equals("storm") || currentType.equals("fog") ||
+                currentType.equals("severe") || currentType.equals("snow")) {
             risk += 0.2;
         }
 
-        // Eğer anlık hız limiti aşıyorsa, ekstra risk
-        if (speedLimit != null && currentSpeed > speedLimit) {
-            risk += 0.1;
+        // Hız etkisi (daha güçlü kademeli sistem)
+        if (speedLimit != null && speedLimit > 0) {
+            double speedRatio = currentSpeed / (double) speedLimit;
+
+            if (speedRatio > 1.0) {
+                // Hız limiti aşılmış — oran ne kadar yüksekse risk artışı o kadar fazla
+                double overRatio = speedRatio - 1.0;
+                // max katkı 0.4, ama hız arttıkça daha da yaklaşır
+                double speedRisk = Math.min(0.4, overRatio * 0.6);
+                risk += speedRisk;
+            } else {
+                // Hız limitinin altında sürüyorsa — çok düşükse risk azalsın
+                double underRatio = 1.0 - speedRatio;
+                double decrease = Math.min(0.2, underRatio * 0.4); // max düşüş 0.2
+                risk -= decrease;
+            }
         }
 
-        // Toplam risk 0-1 arasında olmalı
-        return Math.min(1.0, risk);
+        // Toplam riski 0.0 - 1.0 aralığına sıkıştır
+        return Math.max(0.0, Math.min(1.0, risk));
     }
+
+
 
 
 

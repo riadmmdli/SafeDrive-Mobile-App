@@ -1,5 +1,7 @@
 package com.example.kazauyarisistemi;
 
+import static com.example.kazauyarisistemi.MapManager.determineWeatherType;
+
 import android.app.AlertDialog;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -53,7 +55,7 @@ public class WeatherSpeedInfoManager {
     private List<KazaData> kazaDataList;
     private Location currentLocation;
     private RequestQueue requestQueue;
-    private String currentWeatherDescription = "Bilinmiyor";
+    private static String currentWeatherDescription = "Bilinmiyor";
     private NotificationManager notificationManager;
 
     // Cache için değişkenler
@@ -771,6 +773,16 @@ public class WeatherSpeedInfoManager {
             infoText.append("🛣️ Yol: ").append(nearestKaza.yol != null ? nearestKaza.yol : "Bilinmiyor").append("\n");
             infoText.append("🌩️ Kaza Anı Hava Durumu: ").append(nearestKaza.havaDurumu).append("\n");
             infoText.append("⚠️ Kaza Türü: ").append(nearestKaza.kazaTuru.equals("olumlu") ? "Ölümlü" : "Yaralı").append("\n");
+
+            // 💡 RİSK HESAPLAMA
+            double risk = calculateAccidentRepeatProbability(
+                    MapsActivity.getSimulatedSpeed(),
+                    roadSpeedLimit,
+                    currentWeatherDescription,
+                    nearestKaza.havaDurumu
+            );
+            int riskPercentage = (int) (risk * 100);
+            infoText.append("📊 Kaza Tekrar Riski: %").append(riskPercentage).append("\n");
         } else {
             infoText.append("\nℹ️ Yakında kaza verisi bulunmuyor\n");
         }
@@ -781,6 +793,46 @@ public class WeatherSpeedInfoManager {
                 .setPositiveButton("Tamam", null)
                 .show();
     }
+
+    public String getCurrentWeatherDescription() {
+        return currentWeatherDescription;
+    }
+
+
+    static double calculateAccidentRepeatProbability(float currentSpeed, Integer speedLimit,
+                                                     String currentWeatherDescription, String accidentWeather) {
+        double risk = 0.0;
+
+        // Hız farkı
+        if (speedLimit != null && speedLimit > 0) {
+            double speedDiffRatio = Math.abs(currentSpeed - speedLimit) / (double) speedLimit;
+            double speedScore = Math.max(0, 1.0 - speedDiffRatio); // ne kadar yakınsa, risk o kadar yüksek
+            risk += 0.4 * speedScore;
+        }
+
+        // Hava durumu benzerliği
+        String currentType = MapManager.determineWeatherType(currentWeatherDescription);
+        String accidentType = MapManager.determineWeatherType(accidentWeather);
+
+        if (!currentType.equals("unknown") && currentType.equals(accidentType)) {
+            risk += 0.3;
+        }
+
+        // Ekstrem hava durumu varsa riski artır
+        if (currentType.equals("storm") || currentType.equals("fog") || currentType.equals("severe") || currentType.equals("snow")) {
+            risk += 0.2;
+        }
+
+        // Eğer anlık hız limiti aşıyorsa, ekstra risk
+        if (speedLimit != null && currentSpeed > speedLimit) {
+            risk += 0.1;
+        }
+
+        // Toplam risk 0-1 arasında olmalı
+        return Math.min(1.0, risk);
+    }
+
+
 
     // Manuel hava durumu güncellemesi için method
     public void forceWeatherUpdate() {

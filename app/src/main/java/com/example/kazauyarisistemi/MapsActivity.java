@@ -69,7 +69,7 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
     private boolean isLocationUpdateInProgress = false;
     private boolean ttsReady = false;
 
-    private int simulatedSpeed = 0;
+    private static int simulatedSpeed = 0;
     private TextView tvCurrentSpeed;
     private Button btnIncreaseSpeed, btnDecreaseSpeed;
 
@@ -143,6 +143,9 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
 
     private void updateSpeedDisplay() {
         tvCurrentSpeed.setText("Speed: " + simulatedSpeed + " km/h");
+    }
+    public static float getSimulatedSpeed() {
+        return simulatedSpeed;
     }
 
 
@@ -777,4 +780,6 @@ public class MapsActivity extends FragmentActivity implements OnMapReadyCallback
             weatherSpeedManager.clearWeatherWarning();
         }
     }
+
+
 }

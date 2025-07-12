@@ -91,7 +91,7 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
     }
 
     // Hava durumu tipini belirle
-    private String determineWeatherType(String weatherDescription) {
+    public static String determineWeatherType(String weatherDescription) {
         if (weatherDescription == null) return "unknown";
 
         String lower = weatherDescription.toLowerCase();
@@ -468,6 +468,19 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
 
             warningView.setBackgroundColor(warningColor);
 
+            String currentWeather = weatherSpeedInfoManager.getCurrentWeatherDescription(); // getter tanımlı olmalı
+            float currentSpeed = mapsActivity.getSimulatedSpeed();              // getter tanımlı olmalı
+            Integer speedLimit = kaza.yasalHizLimiti;
+
+            // 📊 Risk oranını hesapla
+            double risk = WeatherSpeedInfoManager.calculateAccidentRepeatProbability(
+                    currentSpeed,
+                    speedLimit,
+                    currentWeather,
+                    kaza.havaDurumu
+            );            int riskPct = (int)(risk * 100);
+
+            // 📝 Uyarı mesajı
             String warningText = "⚠️ UYARI: Yakınlarda " +
                     (kaza.kazaTuru.equals("olumlu") ? "ÖLÜMLÜ" : "YARALI") +
                     " kaza!\nMesafe: " + Math.round(distance) + "m\n" +
@@ -480,6 +493,9 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
                 warningText += "\n🚗 Hız Limiti: " + kaza.yasalHizLimiti + " km/h";
             }
 
+            // 📊 Kaza tekrar riski
+            warningText += "\n📊 Tekrar Riski: %" + riskPct;
+
             warningTextView.setText(warningText);
             closeWarning.setOnClickListener(v -> hideWarning());
 
@@ -489,25 +505,27 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
             Log.d(TAG, "WARNING DISPLAYED: " + warningText);
             Toast.makeText(context, warningText, Toast.LENGTH_LONG).show();
 
-            speakWarning(kaza, distance);
+            speakWarning(kaza, distance, riskPct);
         });
     }
 
-    private void speakWarning(KazaData kaza, float distance) {
+
+    private void speakWarning(KazaData kaza, float distance, int riskPct) {
         if (textToSpeech == null) return;
 
-        // Fonetik okunuşları kullan
         String ilce = getPhoneticText(kaza.ilce);
         String mahalle = getPhoneticText(kaza.mahalle);
 
         String speechText = "Dikkat! Yakınlarda " +
                 (kaza.kazaTuru.equals("olumlu") ? "ölümlü" : "yaralanmalı") +
                 " bir kaza var. Mesafe yaklaşık " + Math.round(distance) + " metre. " +
-                ilce + " ilçesi, " + mahalle + " mahallesi.";
+                ilce + " ilçesi, " + mahalle + " mahallesi. " +
+                "Kaza tekrar riski yüzde " + riskPct;
 
         textToSpeech.stop(); // Önceki konuşmayı durdur
         textToSpeech.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "UYARI_ID");
     }
+
 
     private String getPhoneticText(String text) {
         if (text == null) return "";

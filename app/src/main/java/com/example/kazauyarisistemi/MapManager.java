@@ -23,6 +23,23 @@ import com.google.android.gms.maps.model.MarkerOptions;
 import java.util.List;
 import java.util.Locale;
 
+import android.os.Vibrator;
+import android.os.VibrationEffect;
+import android.os.Build;
+import android.media.MediaPlayer;
+import android.media.AudioManager;
+import android.media.RingtoneManager;
+import android.view.animation.Animation;
+import android.view.animation.AlphaAnimation;
+import android.view.animation.ScaleAnimation;
+import android.view.animation.AnimationSet;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.util.TypedValue;
+import android.os.Handler;
+import android.content.Context;
+import android.net.Uri;
+
 public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListener {
     private static final String TAG = "MapManager";
     private static final float PROXIMITY_THRESHOLD_METERS = 100;
@@ -462,14 +479,8 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
             TextView warningTextView = warningView.findViewById(R.id.warningTextView);
             ImageView closeWarning = warningView.findViewById(R.id.closeWarning);
 
-            int warningColor = kaza.kazaTuru.equals("olumlu") ?
-                    ContextCompat.getColor(context, android.R.color.holo_red_light) :
-                    ContextCompat.getColor(context, android.R.color.holo_orange_light);
-
-            warningView.setBackgroundColor(warningColor);
-
-            String currentWeather = weatherSpeedInfoManager.getCurrentWeatherDescription(); // getter tanımlı olmalı
-            float currentSpeed = mapsActivity.getSimulatedSpeed();              // getter tanımlı olmalı
+            String currentWeather = weatherSpeedInfoManager.getCurrentWeatherDescription();
+            float currentSpeed = mapsActivity.getSimulatedSpeed();
             Integer speedLimit = kaza.yasalHizLimiti;
 
             // 📊 Risk oranını hesapla
@@ -478,54 +489,337 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
                     speedLimit,
                     currentWeather,
                     kaza.havaDurumu
-            );            int riskPct = (int)(risk * 100);
+            );
+            int riskPct = (int)(risk * 100);
 
-            // 📝 Uyarı mesajı
-            String warningText = "⚠️ UYARI: Yakınlarda " +
-                    (kaza.kazaTuru.equals("olumlu") ? "ÖLÜMLÜ" : "YARALI") +
-                    " kaza!\nMesafe: " + Math.round(distance) + "m\n" +
-                    "Konum: " + kaza.ilce + " - " + kaza.mahalle;
+            // 🎯 Risk seviyesini belirle
+            RiskLevel riskLevel = getRiskLevel(riskPct);
 
-            if (kaza.havaDurumu != null && !kaza.havaDurumu.equals("Bilinmiyor")) {
-                warningText += "\n🌤️ Hava: " + kaza.havaDurumu;
-            }
-            if (kaza.yasalHizLimiti != null) {
-                warningText += "\n🚗 Hız Limiti: " + kaza.yasalHizLimiti + " km/h";
-            }
+            // 🎨 Risk seviyesine göre görsel ayarlar
+            applyRiskBasedStyling(warningView, warningTextView, riskLevel, kaza);
 
-            // 📊 Kaza tekrar riski
-            warningText += "\n📊 Tekrar Riski: %" + riskPct;
-
+            // 📝 Risk seviyesine göre uyarı mesajı
+            String warningText = buildWarningMessage(kaza, distance, riskPct, riskLevel);
             warningTextView.setText(warningText);
-            closeWarning.setOnClickListener(v -> hideWarning());
 
+            closeWarning.setOnClickListener(v -> hideWarning());
             warningLayout.addView(warningView);
             warningLayout.setVisibility(View.VISIBLE);
 
             Log.d(TAG, "WARNING DISPLAYED: " + warningText);
-            Toast.makeText(context, warningText, Toast.LENGTH_LONG).show();
 
-            speakWarning(kaza, distance, riskPct);
+            // 🔊 Risk seviyesine göre ses ve titreşim efektleri
+            applyRiskBasedEffects(riskLevel);
+
+            // 🗣️ Sesli uyarı
+            speakWarning(kaza, distance, riskPct, riskLevel);
         });
     }
 
+    // Risk seviyesi enum'u
+    private enum RiskLevel {
+        LOW(0, 30, "DÜŞÜK", "💚"),
+        MEDIUM(31, 60, "ORTA", "🟡"),
+        HIGH(61, 80, "YÜKSEK", "🟠"),
+        CRITICAL(81, 100, "KRİTİK", "🔴");
 
-    private void speakWarning(KazaData kaza, float distance, int riskPct) {
+        final int minPercent;
+        final int maxPercent;
+        final String description;
+        final String emoji;
+
+        RiskLevel(int minPercent, int maxPercent, String description, String emoji) {
+            this.minPercent = minPercent;
+            this.maxPercent = maxPercent;
+            this.description = description;
+            this.emoji = emoji;
+        }
+    }
+
+    private RiskLevel getRiskLevel(int riskPct) {
+        for (RiskLevel level : RiskLevel.values()) {
+            if (riskPct >= level.minPercent && riskPct <= level.maxPercent) {
+                return level;
+            }
+        }
+        return RiskLevel.LOW;
+    }
+
+    private void applyRiskBasedStyling(View warningView, TextView warningTextView, RiskLevel riskLevel, KazaData kaza) {
+        int warningColor;
+        int textColor = Color.WHITE;
+
+        switch (riskLevel) {
+            case LOW:
+                warningColor = kaza.kazaTuru.equals("olumlu") ?
+                        ContextCompat.getColor(context, android.R.color.holo_red_light) :
+                        ContextCompat.getColor(context, android.R.color.holo_orange_light);
+                break;
+            case MEDIUM:
+                warningColor = Color.parseColor("#FF8C00"); // Koyu turuncu
+                break;
+            case HIGH:
+                warningColor = Color.parseColor("#FF4500"); // Kırmızı-turuncu
+                // Yanıp sönme animasyonu
+                startBlinkingAnimation(warningView);
+                break;
+            case CRITICAL:
+                warningColor = Color.parseColor("#DC143C"); // Crimson kırmızı
+                textColor = Color.YELLOW;
+                // Hızlı yanıp sönme + büyüme animasyonu
+                startCriticalAnimation(warningView);
+                break;
+            default:
+                warningColor = ContextCompat.getColor(context, android.R.color.holo_orange_light);
+        }
+
+        warningView.setBackgroundColor(warningColor);
+        warningTextView.setTextColor(textColor);
+
+        // Kritik seviyede kalın yazı
+        if (riskLevel == RiskLevel.CRITICAL || riskLevel == RiskLevel.HIGH) {
+            warningTextView.setTypeface(null, Typeface.BOLD);
+            warningTextView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        }
+    }
+
+    private String buildWarningMessage(KazaData kaza, float distance, int riskPct, RiskLevel riskLevel) {
+        String urgencyPrefix = getUrgencyPrefix(riskLevel);
+
+        String warningText = urgencyPrefix + " " +
+                (kaza.kazaTuru.equals("olumlu") ? "ÖLÜMLÜ" : "YARALI") +
+                " kaza!\nMesafe: " + Math.round(distance) + "m\n" +
+                "Konum: " + kaza.ilce + " - " + kaza.mahalle;
+
+        if (kaza.havaDurumu != null && !kaza.havaDurumu.equals("Bilinmiyor")) {
+            warningText += "\n🌤️ Hava: " + kaza.havaDurumu;
+        }
+        if (kaza.yasalHizLimiti != null) {
+            warningText += "\n🚗 Hız Limiti: " + kaza.yasalHizLimiti + " km/h";
+        }
+
+        // Risk seviyesine göre özel mesaj
+        warningText += "\n📊 Tekrar Riski: " + riskLevel.emoji + " %" + riskPct + " (" + riskLevel.description + ")";
+
+        if (riskLevel == RiskLevel.CRITICAL) {
+            warningText += "\n⚠️ ACIL DURUM: Aşırı yüksek risk!";
+        } else if (riskLevel == RiskLevel.HIGH) {
+            warningText += "\n⚠️ Çok dikkatli olun!";
+        }
+
+        return warningText;
+    }
+
+    private String getUrgencyPrefix(RiskLevel riskLevel) {
+        switch (riskLevel) {
+            case LOW:
+                return "⚠️ DİKKAT:";
+            case MEDIUM:
+                return "⚠️ UYARI:";
+            case HIGH:
+                return "🚨 YÜKSEK RİSK:";
+            case CRITICAL:
+                return "🚨 KRİTİK UYARI:";
+            default:
+                return "⚠️ UYARI:";
+        }
+    }
+
+    private void applyRiskBasedEffects(RiskLevel riskLevel) {
+        // Vibrator servisini al
+        Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+
+        if (vibrator != null && vibrator.hasVibrator()) {
+            switch (riskLevel) {
+                case LOW:
+                    // Hafif tek titreşim
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE));
+                    } else {
+                        vibrator.vibrate(300);
+                    }
+                    break;
+
+                case MEDIUM:
+                    // Çift titreşim
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        long[] pattern = {0, 200, 100, 200};
+                        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                    } else {
+                        long[] pattern = {0, 200, 100, 200};
+                        vibrator.vibrate(pattern, -1);
+                    }
+                    break;
+
+                case HIGH:
+                    // Güçlü tekrarlayan titreşim
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        long[] pattern = {0, 150, 50, 150, 50, 150};
+                        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                    } else {
+                        long[] pattern = {0, 150, 50, 150, 50, 150};
+                        vibrator.vibrate(pattern, -1);
+                    }
+                    break;
+
+                case CRITICAL:
+                    // Çok güçlü alarm benzeri titreşim
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        long[] pattern = {0, 100, 50, 100, 50, 100, 50, 100, 50, 100};
+                        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                    } else {
+                        long[] pattern = {0, 100, 50, 100, 50, 100, 50, 100, 50, 100};
+                        vibrator.vibrate(pattern, -1);
+                    }
+                    break;
+            }
+        }
+
+        // Ses efektleri
+        playWarningSound(riskLevel);
+    }
+
+    private void playWarningSound(RiskLevel riskLevel) {
+        try {
+            MediaPlayer mediaPlayer = new MediaPlayer();
+            android.net.Uri soundUri;
+
+            switch (riskLevel) {
+                case LOW:
+                    // Hafif bildirim sesi
+                    soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+                    break;
+
+                case MEDIUM:
+                    // Alarm sesi
+                    soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+                    break;
+
+                case HIGH:
+                case CRITICAL:
+                    // En yüksek seviye alarm
+                    soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+                    break;
+                default:
+                    soundUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            }
+
+            mediaPlayer.setDataSource(context, soundUri);
+            mediaPlayer.setAudioStreamType(AudioManager.STREAM_ALARM);
+            mediaPlayer.prepare();
+            mediaPlayer.start();
+
+            // Ses süresini risk seviyesine göre ayarla
+            int duration = riskLevel == RiskLevel.CRITICAL ? 3000 :
+                    riskLevel == RiskLevel.HIGH ? 2000 : 1000;
+
+            new Handler().postDelayed(new Runnable() {
+                @Override
+                public void run() {
+                    if (mediaPlayer.isPlaying()) {
+                        mediaPlayer.stop();
+                    }
+                    mediaPlayer.release();
+                }
+            }, duration);
+
+        } catch (Exception e) {
+            Log.e(TAG, "Ses çalınırken hata: " + e.getMessage());
+        }
+    }
+
+    private void startBlinkingAnimation(View view) {
+        Animation blinkAnimation = new AlphaAnimation(0.3f, 1.0f);
+        blinkAnimation.setDuration(500);
+        blinkAnimation.setRepeatMode(Animation.REVERSE);
+        blinkAnimation.setRepeatCount(5);
+        view.startAnimation(blinkAnimation);
+    }
+
+    private void startCriticalAnimation(View view) {
+        // Yanıp sönme + büyüme animasyonu
+        AnimationSet animationSet = new AnimationSet(true);
+
+        // Yanıp sönme
+        AlphaAnimation alphaAnimation = new AlphaAnimation(0.2f, 1.0f);
+        alphaAnimation.setDuration(300);
+        alphaAnimation.setRepeatMode(Animation.REVERSE);
+        alphaAnimation.setRepeatCount(8);
+
+        // Büyüme-küçülme
+        ScaleAnimation scaleAnimation = new ScaleAnimation(
+                1.0f, 1.05f, 1.0f, 1.05f,
+                Animation.RELATIVE_TO_SELF, 0.5f,
+                Animation.RELATIVE_TO_SELF, 0.5f
+        );
+        scaleAnimation.setDuration(300);
+        scaleAnimation.setRepeatMode(Animation.REVERSE);
+        scaleAnimation.setRepeatCount(8);
+
+        animationSet.addAnimation(alphaAnimation);
+        animationSet.addAnimation(scaleAnimation);
+        view.startAnimation(animationSet);
+    }
+
+    private void speakWarning(KazaData kaza, float distance, int riskPct, RiskLevel riskLevel) {
         if (textToSpeech == null) return;
 
         String ilce = getPhoneticText(kaza.ilce);
         String mahalle = getPhoneticText(kaza.mahalle);
 
-        String speechText = "Dikkat! Yakınlarda " +
+        // Risk seviyesine göre konuşma hızı ve ses tonu
+        float speechRate = getSpeechRate(riskLevel);
+        float pitch = getPitch(riskLevel);
+
+        String urgencyWord = getUrgencyWord(riskLevel);
+
+        String speechText = urgencyWord + "! Yakınlarda " +
                 (kaza.kazaTuru.equals("olumlu") ? "ölümlü" : "yaralanmalı") +
                 " bir kaza var. Mesafe yaklaşık " + Math.round(distance) + " metre. " +
                 ilce + " ilçesi, " + mahalle + " mahallesi. " +
-                "Kaza tekrar riski yüzde " + riskPct;
+                "Kaza tekrar riski yüzde " + riskPct + ". " + riskLevel.description + " seviye.";
 
-        textToSpeech.stop(); // Önceki konuşmayı durdur
+        if (riskLevel == RiskLevel.CRITICAL) {
+            speechText += " Acil durum! Aşırı dikkatli olun!";
+        } else if (riskLevel == RiskLevel.HIGH) {
+            speechText += " Çok dikkatli sürün!";
+        }
+
+        textToSpeech.setSpeechRate(speechRate);
+        textToSpeech.setPitch(pitch);
+        textToSpeech.stop();
         textToSpeech.speak(speechText, TextToSpeech.QUEUE_FLUSH, null, "UYARI_ID");
     }
 
+    private float getSpeechRate(RiskLevel riskLevel) {
+        switch (riskLevel) {
+            case LOW: return 0.8f;      // Yavaş
+            case MEDIUM: return 1.0f;   // Normal
+            case HIGH: return 1.2f;     // Hızlı
+            case CRITICAL: return 1.4f; // Çok hızlı
+            default: return 1.0f;
+        }
+    }
+
+    private float getPitch(RiskLevel riskLevel) {
+        switch (riskLevel) {
+            case LOW: return 0.9f;      // Düşük ton
+            case MEDIUM: return 1.0f;   // Normal ton
+            case HIGH: return 1.1f;     // Yüksek ton
+            case CRITICAL: return 1.3f; // Çok yüksek ton
+            default: return 1.0f;
+        }
+    }
+
+    private String getUrgencyWord(RiskLevel riskLevel) {
+        switch (riskLevel) {
+            case LOW: return "Dikkat";
+            case MEDIUM: return "Uyarı";
+            case HIGH: return "Tehlike";
+            case CRITICAL: return "Acil durum";
+            default: return "Dikkat";
+        }
+    }
 
     private String getPhoneticText(String text) {
         if (text == null) return "";

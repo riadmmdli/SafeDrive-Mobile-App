@@ -1,32 +1,56 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/warningLayoutRoot"
-    android:layout_width="wrap_content"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:padding="16dp"
-    android:background="@android:color/holo_red_light">
+    android:padding="16dp">
 
-    <TextView
-        android:id="@+id/warningTextView"
-        android:layout_width="0dp"
+    <!-- Pulse ring for ripple effects -->
+    <View
+        android:id="@+id/pulseRing"
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_centerHorizontal="true"
+        android:layout_marginBottom="8dp"
+        android:background="@drawable/pulse_ring_drawable"
+        android:visibility="gone" />
+
+    <!-- Main warning container -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_weight="1"
-        android:text="Uyarı mesajı"
-        android:textColor="@android:color/black"
-        android:textSize="16sp"
-        android:textStyle="bold"
-        android:drawableStart="@android:drawable/ic_dialog_alert"
-        android:drawablePadding="8dp"
-        android:gravity="center_vertical" />
+        android:layout_below="@id/pulseRing"
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <ImageView
-        android:id="@+id/closeWarning"
-        android:layout_width="24dp"
-        android:layout_height="24dp"
-        android:src="@android:drawable/ic_menu_close_clear_cancel"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
-        android:padding="4dp" />
+        <!-- Risk indicator -->
+        <View
+            android:id="@+id/riskIndicator"
+            android:layout_width="20dp"
+            android:layout_height="20dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="8dp" />
 
-</LinearLayout>
+        <!-- Warning text -->
+        <TextView
+            android:id="@+id/warningTextView"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textSize="14sp"
+            android:textColor="#FFFFFF"
+            android:lineSpacingMultiplier="1.2" />
+
+        <!-- Close button -->
+        <ImageView
+            android:id="@+id/closeWarning"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_gravity="end"
+            android:layout_marginTop="8dp"
+            android:src="@drawable/ic_close"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:padding="8dp" />
+
+    </LinearLayout>
+
+</RelativeLayout>

@@ -795,6 +795,7 @@ public class WeatherSpeedInfoManager {
     }
 
     public String getCurrentWeatherDescription() {
+
         return currentWeatherDescription;
     }
 
@@ -807,13 +808,15 @@ public class WeatherSpeedInfoManager {
         String currentType = MapManager.determineWeatherType(currentWeatherDescription);
         String accidentType = MapManager.determineWeatherType(accidentWeather);
 
-        if (!currentType.equals("unknown") && currentType.equals(accidentType)) {
-            risk += 0.3;
+        if (currentType != null && accidentType != null && !currentType.equalsIgnoreCase("unknown")) {
+            if (accidentType.toLowerCase().contains(currentType.toLowerCase())) {
+                risk += 0.1;
+            }
         }
 
         // Ekstrem hava durumu varsa riski artır
         if (currentType.equals("storm") || currentType.equals("fog") ||
-                currentType.equals("severe") || currentType.equals("snow")) {
+                currentType.equals("severe") || currentType.equals("snow") || currentType.equals("rain")) {
             risk += 0.2;
         }
 

@@ -779,8 +779,10 @@ public class WeatherSpeedInfoManager {
                     MapsActivity.getSimulatedSpeed(),
                     roadSpeedLimit,
                     currentWeatherDescription,
-                    nearestKaza.havaDurumu
+                    nearestKaza.havaDurumu,
+                    nearestKaza.kazaTuru
             );
+
             int riskPercentage = (int) (risk * 100);
             infoText.append("📊 Kaza Tekrar Riski: %").append(riskPercentage).append("\n");
         } else {
@@ -801,15 +803,16 @@ public class WeatherSpeedInfoManager {
 
 
     static double calculateAccidentRepeatProbability(float currentSpeed, Integer speedLimit,
-                                                     String currentWeatherDescription, String accidentWeather) {
+                                                     String currentWeatherDescription, String accidentWeather,
+                                                     String accidentType) {
         double risk = 0.0;
 
         // Hava durumu benzerliği
         String currentType = MapManager.determineWeatherType(currentWeatherDescription);
-        String accidentType = MapManager.determineWeatherType(accidentWeather);
+        String accidentWeatherType = MapManager.determineWeatherType(accidentWeather);
 
-        if (currentType != null && accidentType != null && !currentType.equalsIgnoreCase("unknown")) {
-            if (accidentType.toLowerCase().contains(currentType.toLowerCase())) {
+        if (currentType != null && accidentWeatherType != null && !currentType.equalsIgnoreCase("unknown")) {
+            if (accidentWeatherType.toLowerCase().contains(currentType.toLowerCase())) {
                 risk += 0.1;
             }
         }
@@ -820,27 +823,34 @@ public class WeatherSpeedInfoManager {
             risk += 0.2;
         }
 
-        // Hız etkisi (daha güçlü kademeli sistem)
+        // Kaza türü etkisi
+        if (accidentType != null) {
+            if (accidentType.equalsIgnoreCase("olumlu")) {
+                risk += 0.5; // Ölümcül kaza → daha yüksek risk katkısı
+            } else if (accidentType.equalsIgnoreCase("yaralı")) {
+                risk += 0.15; // Yaralanmalı kaza → orta seviye katkı
+            }
+        }
+
+        // Hız etkisi
         if (speedLimit != null && speedLimit > 0) {
             double speedRatio = currentSpeed / (double) speedLimit;
 
             if (speedRatio > 1.0) {
-                // Hız limiti aşılmış — oran ne kadar yüksekse risk artışı o kadar fazla
                 double overRatio = speedRatio - 1.0;
-                // max katkı 0.4, ama hız arttıkça daha da yaklaşır
                 double speedRisk = Math.min(0.4, overRatio * 0.6);
                 risk += speedRisk;
             } else {
-                // Hız limitinin altında sürüyorsa — çok düşükse risk azalsın
                 double underRatio = 1.0 - speedRatio;
-                double decrease = Math.min(0.2, underRatio * 0.4); // max düşüş 0.2
+                double decrease = Math.min(0.2, underRatio * 0.4);
                 risk -= decrease;
             }
         }
 
-        // Toplam riski 0.0 - 1.0 aralığına sıkıştır
+        // Risk değeri 0.0 - 1.0 aralığında sınırlandır
         return Math.max(0.0, Math.min(1.0, risk));
     }
+
 
 
 

@@ -58,4 +58,10 @@ dependencies {
 
     implementation("com.android.volley:volley:1.2.1")
 
+    implementation ("com.squareup.retrofit2:retrofit:2.9.0")
+    implementation ("com.squareup.retrofit2:converter-gson:2.9.0")
+    implementation ("com.google.ai.client.generativeai:generativeai:0.7.0")
+    implementation ("com.google.guava:guava:31.1-android")
+    implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.6.4")
+
 }

@@ -135,34 +135,11 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
 
     // Hava durumu uyarı mesajını oluştur
     private String generateWeatherWarningMessage(String weatherDescription, String weatherType) {
-        switch (weatherType) {
-            case "rain":
-                return "🌧️ YAĞMUR UYARISI: Hava durumu yağmurlu! " +
-                        "Sürüş yaparken dikkatli olun. Fren mesafesi artabilir, " +
-                        "yol kaygan olabilir. Hızınızı düşürün.";
-            case "snow":
-                return "❄️ KAR UYARISI: Hava durumu karlı! " +
-                        "Sürüş yaparken son derece dikkatli olun. Yol buzlu ve kaygan olabilir. " +
-                        "Hızınızı düşürün, ani fren yapmayın.";
-            case "storm":
-                return "⛈️ FIRTINA UYARISI: Hava durumu fırtınalı! " +
-                        "Sürüş yaparken çok dikkatli olun. Görüş mesafesi azalabilir, " +
-                        "rüzgar etkisiyle araç kontrolü zorlaşabilir.";
-            case "fog":
-                return "🌫️ SIS UYARISI: Hava durumu sisli! " +
-                        "Görüş mesafesi azalmış. Farları yakın, hızınızı düşürün, " +
-                        "araç takip mesafenizi artırın.";
-            case "severe":
-                return "⚠️ ŞİDDETLİ HAVA UYARISI: Hava durumu çok kötü! " +
-                        "Sürüş yaparken son derece dikkatli olun. Mümkünse seyahatinizi erteleyiniz.";
-            case "wind":
-                return "💨 RÜZGAR UYARISI: Hava durumu rüzgarlı! " +
-                        "Araç kontrolünde dikkatli olun. Yan rüzgar etkisiyle sürüş zorlaşabilir.";
-            default:
-                return "⚠️ HAVA DURUMU UYARISI: Hava durumu sürüş için uygun değil! " +
-                        "Sürüş yaparken dikkatli olun. (" + weatherDescription + ")";
-        }
+        String prompt = "Bir mobil uygulama için sürücüleri bilgilendirecek kısa ve net bir uyarı mesajı oluştur. " +
+                "Hava durumu: " + weatherDescription + ". Uyarı Türkçe ve ikna edici olsun.";
+        return GeminiApi.generateText(prompt);
     }
+
 
     public void showWeatherWarning(String message, String weatherType) {
         if (weatherWarningLayout == null || mapsActivity == null) {
@@ -483,39 +460,70 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
             float currentSpeed = mapsActivity.getSimulatedSpeed();
             Integer speedLimit = kaza.yasalHizLimiti;
 
-            // 📊 Risk oranını hesapla
+            // Kaza türü düzeltme
+            String adjustedKazaTuru = kaza.kazaTuru;
+            if ("olumlu".equalsIgnoreCase(adjustedKazaTuru)) {
+                adjustedKazaTuru = "ölümlü";
+            }
+
+            // Risk hesaplama
             double risk = WeatherSpeedInfoManager.calculateAccidentRepeatProbability(
                     currentSpeed,
                     speedLimit,
                     currentWeather,
                     kaza.havaDurumu,
-                    kaza.kazaTuru
+                    adjustedKazaTuru
             );
             int riskPct = (int)(risk * 100);
 
-            // 🎯 Risk seviyesini belirle
             RiskLevel riskLevel = getRiskLevel(riskPct);
 
-            // 🎨 Risk seviyesine göre görsel ayarlar
             applyRiskBasedStyling(warningView, warningTextView, riskLevel, kaza);
 
-            // 📝 Risk seviyesine göre uyarı mesajı
-            String warningText = buildWarningMessage(kaza, distance, riskPct, riskLevel);
-            warningTextView.setText(warningText);
+            // Klasik uyarı mesajını kaza türü ve risk yüzdesiyle oluştur
+            String defaultWarningText = buildWarningMessage(kaza, distance, riskPct, riskLevel)
+                    .replace(kaza.kazaTuru, adjustedKazaTuru)
+                    + "\nKaza olma olasılığı: %" + riskPct;
+
+            // AI prompt'una risk yüzdesini ekle
+            String prompt = "Kayseri'de şu anda hava durumu: " + currentWeather +
+                    ". Bu bölgede daha önce '" + adjustedKazaTuru + "' türünde kaza yaşandı. " +
+                    "Araç hızı: " + currentSpeed + " km/s, yasal hız limiti: " + speedLimit +
+                    ". Kaza olma olasılığı yaklaşık %" + riskPct + " civarında. " +
+                    "Sürücüler için dikkatli olmalarını hatırlatacak kısa ve net bir uyarı mesajı üret.";
+
+            new Thread(() -> {
+                String aiMessage = GeminiApi.generateText(prompt);
+
+                mapsActivity.runOnUiThread(() -> {
+                    String finalMessage = (aiMessage == null || aiMessage.trim().isEmpty())
+                            ? defaultWarningText
+                            : aiMessage;
+
+                    warningTextView.setText(finalMessage);
+                    if (textToSpeech != null) {
+                        String cleanText = finalMessage.replaceAll("[*]+", "").trim();
+                        textToSpeech.speak(cleanText, TextToSpeech.QUEUE_FLUSH, null, null);
+                    }
+
+
+                });
+            }).start();
 
             closeWarning.setOnClickListener(v -> hideWarning());
             warningLayout.addView(warningView);
             warningLayout.setVisibility(View.VISIBLE);
 
-            Log.d(TAG, "WARNING DISPLAYED: " + warningText);
+            Log.d(TAG, "WARNING DISPLAYED: " + defaultWarningText);
 
-            // 🔊 Risk seviyesine göre ses ve titreşim efektleri
             applyRiskBasedEffects(riskLevel);
-
-            // 🗣️ Sesli uyarı
-            speakWarning(kaza, distance, riskPct, riskLevel);
         });
+
+
     }
+
+
+
 
     // Risk seviyesi enum'u
     private enum RiskLevel {
@@ -585,31 +593,19 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
     }
 
     private String buildWarningMessage(KazaData kaza, float distance, int riskPct, RiskLevel riskLevel) {
-        String urgencyPrefix = getUrgencyPrefix(riskLevel);
+        String prompt = "Aşağıdaki bilgilere göre sürücüler için kısa ve net bir kaza uyarı mesajı oluştur. " +
+                "Türkçe ve sürüş güvenliğine odaklı olsun.\n\n" +
+                "Kaza türü: " + (kaza.kazaTuru.equals("olumlu") ? "Ölümlü" : "Yaralı") + "\n" +
+                "İlçe: " + kaza.ilce + "\n" +
+                "Mahalle: " + kaza.mahalle + "\n" +
+                "Hava durumu: " + (kaza.havaDurumu != null ? kaza.havaDurumu : "Bilinmiyor") + "\n" +
+                "Hız limiti: " + (kaza.yasalHizLimiti != null ? kaza.yasalHizLimiti + " km/h" : "Bilinmiyor") + "\n" +
+                "Mesafe: " + Math.round(distance) + " metre\n" +
+                "Tekrar riski: %" + riskPct + " - " + riskLevel.description;
 
-        String warningText = urgencyPrefix + " " +
-                (kaza.kazaTuru.equals("olumlu") ? "ÖLÜMLÜ" : "YARALI") +
-                " kaza!\nMesafe: " + Math.round(distance) + "m\n" +
-                "Konum: " + kaza.ilce + " - " + kaza.mahalle;
-
-        if (kaza.havaDurumu != null && !kaza.havaDurumu.equals("Bilinmiyor")) {
-            warningText += "\n🌤️ Hava: " + kaza.havaDurumu;
-        }
-        if (kaza.yasalHizLimiti != null) {
-            warningText += "\n🚗 Hız Limiti: " + kaza.yasalHizLimiti + " km/h";
-        }
-
-        // Risk seviyesine göre özel mesaj
-        warningText += "\n📊 Tekrar Riski: " + riskLevel.emoji + " %" + riskPct + " (" + riskLevel.description + ")";
-
-        if (riskLevel == RiskLevel.CRITICAL) {
-            warningText += "\n⚠️ ACIL DURUM: Aşırı yüksek risk!";
-        } else if (riskLevel == RiskLevel.HIGH) {
-            warningText += "\n⚠️ Çok dikkatli olun!";
-        }
-
-        return warningText;
+        return GeminiApi.generateText(prompt);
     }
+
 
     private String getUrgencyPrefix(RiskLevel riskLevel) {
         switch (riskLevel) {
@@ -630,49 +626,51 @@ public class MapManager implements WeatherSpeedInfoManager.WeatherWarningListene
         // Vibrator servisini al
         Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
 
-        if (vibrator != null && vibrator.hasVibrator()) {
-            switch (riskLevel) {
-                case LOW:
-                    // Hafif tek titreşim
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE));
-                    } else {
-                        vibrator.vibrate(300);
-                    }
-                    break;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+            if (vibrator != null && vibrator.hasVibrator()) {
+                switch (riskLevel) {
+                    case LOW:
+                        // Hafif tek titreşim
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE));
+                        } else {
+                            vibrator.vibrate(300);
+                        }
+                        break;
 
-                case MEDIUM:
-                    // Çift titreşim
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        long[] pattern = {0, 200, 100, 200};
-                        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
-                    } else {
-                        long[] pattern = {0, 200, 100, 200};
-                        vibrator.vibrate(pattern, -1);
-                    }
-                    break;
+                    case MEDIUM:
+                        // Çift titreşim
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            long[] pattern = {0, 200, 100, 200};
+                            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                        } else {
+                            long[] pattern = {0, 200, 100, 200};
+                            vibrator.vibrate(pattern, -1);
+                        }
+                        break;
 
-                case HIGH:
-                    // Güçlü tekrarlayan titreşim
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        long[] pattern = {0, 150, 50, 150, 50, 150};
-                        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
-                    } else {
-                        long[] pattern = {0, 150, 50, 150, 50, 150};
-                        vibrator.vibrate(pattern, -1);
-                    }
-                    break;
+                    case HIGH:
+                        // Güçlü tekrarlayan titreşim
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            long[] pattern = {0, 150, 50, 150, 50, 150};
+                            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                        } else {
+                            long[] pattern = {0, 150, 50, 150, 50, 150};
+                            vibrator.vibrate(pattern, -1);
+                        }
+                        break;
 
-                case CRITICAL:
-                    // Çok güçlü alarm benzeri titreşim
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        long[] pattern = {0, 100, 50, 100, 50, 100, 50, 100, 50, 100};
-                        vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
-                    } else {
-                        long[] pattern = {0, 100, 50, 100, 50, 100, 50, 100, 50, 100};
-                        vibrator.vibrate(pattern, -1);
-                    }
-                    break;
+                    case CRITICAL:
+                        // Çok güçlü alarm benzeri titreşim
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            long[] pattern = {0, 100, 50, 100, 50, 100, 50, 100, 50, 100};
+                            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+                        } else {
+                            long[] pattern = {0, 100, 50, 100, 50, 100, 50, 100, 50, 100};
+                            vibrator.vibrate(pattern, -1);
+                        }
+                        break;
+                }
             }
         }
 
